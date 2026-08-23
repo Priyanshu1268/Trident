@@ -1,0 +1,24 @@
+# Step 1: Build stage
+FROM maven:3.9.6-eclipse-temurin-17 AS build
+WORKDIR /app
+
+# Copy pom.xml and download dependencies
+COPY pom.xml .
+RUN mvn dependency:go-offline -B
+
+# Copy source code and build package
+COPY src ./src
+RUN mvn clean package -DskipTests
+
+# Step 2: Runtime stage
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+
+# Copy built JAR file from build stage
+COPY --from=build /app/target/*.jar app.jar
+
+# Expose backend port
+EXPOSE 8080
+
+# Run application
+ENTRYPOINT ["java", "-jar", "app.jar"]
