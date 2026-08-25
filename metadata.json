@@ -1,0 +1,10 @@
+{
+  "name": "Trident Crash Response & Safety System",
+  "description": "Real-time AI crash detection, telemetry ingestion, emergency alert dispatch, driver medical profiling, and vision safety monitoring system.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
