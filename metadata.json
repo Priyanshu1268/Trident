@@ -1,6 +1,6 @@
 {
-  "name": "Trident Crash Response & Safety System",
-  "description": "Real-time AI crash detection, telemetry ingestion, emergency alert dispatch, driver medical profiling, and vision safety monitoring system.",
+  "name": "SafeRide AI — Accident Detection & Rapid-Response System",
+  "description": "AI-powered emergency vehicle accident detection and rapid-response platform integrating ESP32, MPU6050, SIM800L, ML inference, multi-tier contact escalation, and driver ICE profiling.",
   "requestFramePermissions": [
     "camera"
   ],

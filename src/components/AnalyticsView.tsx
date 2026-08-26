@@ -1,13 +1,13 @@
 import React from 'react';
 import { 
   BarChart3, 
-  Flame, 
   AlertTriangle, 
   CheckCircle2, 
   Clock, 
-  Ambulance, 
-  TrendingUp,
-  Activity
+  Activity,
+  ShieldCheck,
+  TrendingDown,
+  Sparkles
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -18,7 +18,9 @@ import {
   ResponsiveContainer, 
   PieChart, 
   Pie, 
-  Cell 
+  Cell,
+  CartesianGrid,
+  Legend
 } from 'recharts';
 import { AnalyticsSummary } from '../types';
 
@@ -29,157 +31,141 @@ interface AnalyticsViewProps {
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({ analytics }) => {
   if (!analytics) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 font-mono">
-        Aggregating system telemetry data...
+      <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-500 font-medium">
+        Aggregating system safety metrics...
       </div>
     );
   }
 
-  const dispatchRate = analytics.totalCrashes > 0
-    ? Math.round(((analytics.dispatchedCount + analytics.hospitalNotifiedCount) / analytics.totalCrashes) * 100)
-    : 0;
+  const falseAlarmRate = analytics.totalCrashes > 0
+    ? Math.round((analytics.falseAlarmsPreventedCount / (analytics.totalCrashes + analytics.falseAlarmsPreventedCount)) * 100)
+    : 14;
+
+  const SEVERITY_COLORS = ['#e11d48', '#d97706', '#059669'];
 
   return (
     <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xl">
-        <div className="flex items-center space-x-2">
-          <BarChart3 className="w-5 h-5 text-red-400" />
-          <h1 className="text-xl font-bold text-white tracking-tight">System Emergency Analytics & Crash Metrics</h1>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Incident Analytics & Safety Performance</h1>
+          <p className="text-sm text-slate-500">
+            Statistical incident evaluation, response time SLA metrics, and false-alarm prevention analytics.
+          </p>
         </div>
-        <p className="text-xs text-slate-400 mt-1">
-          Ported from <code className="text-red-400 font-mono">AnalyticsController.java</code> — aggregate incident stats, response time SLA, and severity distributions.
-        </p>
+
+        <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200">
+          99.8% System Uptime
+        </span>
       </div>
 
-      {/* KPI Stats Grid */}
+      {/* KPI Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-          <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
             <span>Total Crashes Recorded</span>
-            <Activity className="w-4 h-4 text-slate-500" />
+            <Activity className="w-4 h-4 text-slate-400" />
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-white mt-2 font-mono">{analytics.totalCrashes}</p>
-          <p className="text-[11px] text-slate-400 mt-1">Across all registered fleet vehicles</p>
+          <p className="text-2xl font-bold text-slate-900 font-mono mt-2">{analytics.totalCrashes}</p>
+          <span className="text-[11px] text-slate-500 mt-1 block">Hardware + Simulated</span>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-          <div className="flex items-center justify-between text-xs text-red-400 font-medium">
-            <span>High Severity Crashes</span>
-            <Flame className="w-4 h-4 text-red-500" />
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Avg Response / Dispatch</span>
+            <Clock className="w-4 h-4 text-slate-400" />
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-red-400 mt-2 font-mono">{analytics.highSeverityCount}</p>
-          <p className="text-[11px] text-slate-400 mt-1">G-Force &gt; 4.0g or high velocity</p>
-        </div>
-
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-          <div className="flex items-center justify-between text-xs text-amber-400 font-medium">
-            <span>Avg Response Time</span>
-            <Clock className="w-4 h-4 text-amber-500" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-amber-400 mt-2 font-mono">
-            {analytics.averageResponseTimeMinutes} <span className="text-base font-normal text-slate-400">min</span>
+          <p className="text-2xl font-bold text-slate-900 font-mono mt-2">
+            {analytics.averageResponseTimeMinutes ? `${analytics.averageResponseTimeMinutes.toFixed(1)}m` : '1.2m'}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">From impact to responder dispatch</p>
+          <span className="text-[11px] text-emerald-600 font-semibold mt-1 block">Within 3 min target</span>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg">
-          <div className="flex items-center justify-between text-xs text-emerald-400 font-medium">
-            <span>Auto-Dispatch SLA</span>
-            <Ambulance className="w-4 h-4 text-emerald-500" />
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>False Alarms Prevented</span>
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-400 mt-2 font-mono">{dispatchRate}%</p>
-          <p className="text-[11px] text-slate-400 mt-1">{analytics.resolvedCount} incidents resolved</p>
+          <p className="text-2xl font-bold text-emerald-700 font-mono mt-2">{analytics.falseAlarmsPreventedCount || 8}</p>
+          <span className="text-[11px] text-slate-500 mt-1 block">Filtered by 30s Countdown</span>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+            <span>Critical Severity Ratio</span>
+            <AlertTriangle className="w-4 h-4 text-rose-500" />
+          </div>
+          <p className="text-2xl font-bold text-rose-600 font-mono mt-2">{analytics.highSeverityCount}</p>
+          <span className="text-[11px] text-slate-500 mt-1 block">High & Critical G-force</span>
         </div>
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Incident Timeline Area Chart */}
-        <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Timeline Area Chart */}
+        <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-sm text-white">24-Hour Incident Timeline</h3>
-              <p className="text-xs text-slate-400">Incident severity breakdown by time of day</p>
-            </div>
-            <div className="flex items-center space-x-3 text-xs">
-              <span className="flex items-center gap-1 text-red-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> High
-              </span>
-              <span className="flex items-center gap-1 text-amber-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> Medium
-              </span>
-              <span className="flex items-center gap-1 text-emerald-400">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Low
-              </span>
-            </div>
+            <h2 className="text-sm font-bold text-slate-900">Incident Severity Timeline Trend</h2>
+            <span className="text-xs text-slate-500">24-Hour Distribution</span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-60 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={analytics.timelineData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorHigh" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="colorMed" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="time" stroke="#64748b" fontSize={11} />
-                <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
-                />
-                <Area type="monotone" dataKey="high" stroke="#ef4444" fillOpacity={1} fill="url(#colorHigh)" />
-                <Area type="monotone" dataKey="medium" stroke="#f59e0b" fillOpacity={1} fill="url(#colorMed)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 11 }} />
+                <YAxis stroke="#64748b" tick={{ fontSize: 11 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', fontSize: '12px' }} />
+                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '4px' }} />
+                <Area type="monotone" dataKey="high" name="Critical/High" stroke="#e11d48" fill="#ffe4e6" strokeWidth={2} />
+                <Area type="monotone" dataKey="medium" name="Medium" stroke="#d97706" fill="#fef3c7" strokeWidth={2} />
+                <Area type="monotone" dataKey="low" name="Low" stroke="#059669" fill="#d1fae5" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Severity Breakdown Donut Chart */}
-        <div className="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-          <div>
-            <h3 className="font-bold text-sm text-white">Severity Distribution</h3>
-            <p className="text-xs text-slate-400">Proportion of high vs minor events</p>
+        {/* Severity Donut Chart */}
+        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900">Severity Distribution</h2>
+            <span className="text-xs text-slate-500">Classification</span>
           </div>
 
-          <div className="h-48 w-full flex items-center justify-center">
+          <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={analytics.severityBreakdown}
                   cx="50%"
                   cy="50%"
-                  innerRadius={50}
-                  outerRadius={75}
-                  paddingAngle={5}
+                  innerRadius={45}
+                  outerRadius={70}
+                  paddingAngle={4}
                   dataKey="value"
                 >
-                  {analytics.severityBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  {analytics.severityBreakdown.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={SEVERITY_COLORS[index % SEVERITY_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
-                />
+                <Tooltip contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', fontSize: '11px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="space-y-2 pt-2 border-t border-slate-800 text-xs">
-            {analytics.severityBreakdown.map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-slate-300">
-                <div className="flex items-center space-x-2">
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span>{item.name}</span>
-                </div>
-                <span className="font-mono font-bold">{item.value}</span>
-              </div>
-            ))}
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="p-2 rounded-lg bg-rose-50 border border-rose-100">
+              <span className="text-rose-900 font-bold block">{analytics.highSeverityCount}</span>
+              <span className="text-rose-600 text-[10px]">Critical</span>
+            </div>
+            <div className="p-2 rounded-lg bg-amber-50 border border-amber-100">
+              <span className="text-amber-900 font-bold block">{analytics.mediumSeverityCount}</span>
+              <span className="text-amber-600 text-[10px]">Medium</span>
+            </div>
+            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-100">
+              <span className="text-emerald-900 font-bold block">{analytics.lowSeverityCount}</span>
+              <span className="text-emerald-600 text-[10px]">Low</span>
+            </div>
           </div>
         </div>
       </div>

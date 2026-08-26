@@ -1,4 +1,4 @@
-export type SeverityLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
 
 export type AlertStatus =
   | 'PENDING'
@@ -13,34 +13,49 @@ export type VehicleType = 'CAR' | 'BIKE' | 'TRUCK' | 'AMBULANCE';
 
 export type UserRole = 'DRIVER' | 'HOSPITAL' | 'RESPONDER' | 'ADMIN';
 
+export type EscalationLevel = 1 | 2 | 3 | 4;
+
 export interface EmergencyContact {
+  id?: string;
   name: string;
   relationship: string;
   phone: string;
-  isPriority: boolean;
+  priority: 'PRIMARY' | 'SECONDARY' | 'TERTIARY';
+  notifyOnConfirmation?: boolean;
+  isPriority?: boolean;
 }
 
-export interface User {
-  id: number;
-  email: string;
-  name: string;
-  phone: string;
-  bloodGroup?: string;
-  medicalConditions?: string;
-  secondaryEmergencyContact?: string;
-  emergencyContacts?: EmergencyContact[];
-  organDonor?: boolean;
+export interface MedicalProfileData {
+  bloodGroup: string;
   allergies?: string;
+  chronicConditions?: string;
   medications?: string;
+  emergencyInstructions?: string;
+  organDonor?: boolean;
+  emergencyDoctorName?: string;
+  emergencyDoctorPhone?: string;
+  insuranceProvider?: string;
+  insurancePolicyNumber?: string;
   dateOfBirth?: string;
   heightCm?: number;
   weightKg?: number;
+}
+
+export interface User {
+  id: number | string;
+  email: string;
+  name: string;
+  phone: string;
   role: UserRole;
+  bloodGroup?: string;
+  medicalConditions?: string;
+  medicalProfile?: MedicalProfileData;
+  emergencyContacts?: EmergencyContact[];
   createdAt: string;
 }
 
 export interface Vehicle {
-  id: number;
+  id: number | string;
   vehicleNumber: string;
   owner: string;
   emergencyContactPhone: string;
@@ -52,11 +67,36 @@ export interface Vehicle {
   hardwareConfig?: HardwareDeviceConfig;
 }
 
+export interface AIAssessment {
+  accidentProbability: number;
+  confidence: number;
+  severity: SeverityLevel;
+  anomalyScore: number;
+  contributingFactors: string[];
+  modelVersion: string;
+  timeSeriesSummary?: {
+    peakG: number;
+    peakGyro: number;
+    jerk: number;
+    tiltAngle: number;
+    impactDurationMs: number;
+  };
+}
+
+export interface AuditTimelineEvent {
+  timestamp: string;
+  action: string;
+  actor: string;
+  detail: string;
+  status: 'INFO' | 'WARNING' | 'ALERT' | 'SUCCESS';
+}
+
 export interface CrashAlert {
   id: number;
   vehicle: Vehicle;
   latitude: number;
   longitude: number;
+  locationAccuracy?: number;
   locationName?: string;
   gForce: number;
   impactSpeed: number;
@@ -70,10 +110,12 @@ export interface CrashAlert {
   dispatchedAmbulanceUnit?: string | null;
   assignedHospital?: string | null;
   visionEvent?: 'HELMET_MISSING' | 'POTHOLE_IMPACT' | 'DIRECT_COLLISION' | 'ROLLOVER' | null;
-  confirmationCountdown?: number; // In seconds
+  confirmationCountdown?: number; // in seconds
   isConfirmedAccident?: boolean;
   cancelledReason?: string;
   callDispatches?: EmergencyCallLog[];
+  aiAssessment?: AIAssessment;
+  timeline?: AuditTimelineEvent[];
 }
 
 export interface TelemetryRequest {
@@ -94,6 +136,7 @@ export interface TelemetryRequest {
   gyroZ?: number;
   pitch?: number;
   roll?: number;
+  jerk?: number;
   simSignalQuality?: number;
   isHardwareSource?: boolean;
   deviceId?: string;
@@ -113,6 +156,7 @@ export interface HardwareTelemetry {
   gForce: number;
   pitch: number;
   roll: number;
+  jerk?: number;
   speed: number;
   latitude: number;
   longitude: number;
@@ -120,6 +164,7 @@ export interface HardwareTelemetry {
   csq: number;
   gprsAttached: boolean;
   batteryVoltage: number;
+  state?: string;
   isEmergencyButtonPressed?: boolean;
   impactDetected?: boolean;
 }
@@ -153,6 +198,9 @@ export interface CrashConfirmationSession {
   totalSeconds: number;
   status: 'COUNTDOWN_ACTIVE' | 'CANCELLED_SAFE' | 'EXPIRED_ESCALATED';
   startedAt: string;
+  aiConfidence?: number;
+  aiSeverity?: SeverityLevel;
+  contributingFactors?: string[];
 }
 
 export interface EmergencyCallLog {
@@ -204,3 +252,14 @@ export interface AuthState {
   isAuthenticated: boolean;
 }
 
+export interface SystemHealthStatus {
+  deviceConnected: boolean;
+  mpu6050Active: boolean;
+  gsmAvailable: boolean;
+  internetConnected: boolean;
+  gpsAvailable: boolean;
+  csqSignal: number;
+  batteryLevel: number;
+  demoMode: boolean;
+  countdownDuration: number;
+}

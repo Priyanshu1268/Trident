@@ -4,9 +4,7 @@ import {
   Lock, 
   Mail, 
   Phone, 
-  HeartHandshake, 
   X, 
-  Check, 
   ShieldCheck 
 } from 'lucide-react';
 import { User, UserRole } from '../types';
@@ -18,13 +16,11 @@ interface AuthModalProps {
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess }) => {
   const [isSignup, setIsSignup] = useState<boolean>(false);
-  const [email, setEmail] = useState<string>('driver.rahul@example.com');
+  const [email, setEmail] = useState<string>('driver.john@example.com');
   const [password, setPassword] = useState<string>('password123');
-  const [name, setName] = useState<string>('Rahul Sharma');
+  const [name, setName] = useState<string>('John Doe');
   const [phone, setPhone] = useState<string>('+919876543210');
   const [bloodGroup, setBloodGroup] = useState<string>('O+');
-  const [medicalConditions, setMedicalConditions] = useState<string>('Diabetic, Penicillin Allergy');
-  const [secondaryContact, setSecondaryContact] = useState<string>('+919811223344 (Father)');
   const [role, setRole] = useState<UserRole>('DRIVER');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +32,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess })
 
     const endpoint = isSignup ? '/api/v1/auth/signup' : '/api/v1/auth/login';
     const payload = isSignup
-      ? { email, password, name, phone, bloodGroup, medicalConditions, secondaryEmergencyContact: secondaryContact, role }
+      ? { email, password, name, phone, bloodGroup, role }
       : { email, password };
 
     try {
@@ -61,152 +57,114 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onLoginSuccess })
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div className="flex items-center space-x-2">
-            <ShieldCheck className="w-5 h-5 text-red-400" />
-            <h3 className="font-bold text-lg text-white">
-              {isSignup ? 'Create Driver / Responder Account' : 'Driver & Staff Sign In'}
-            </h3>
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-slate-800" />
+            <h2 className="text-base font-bold text-slate-900">
+              {isSignup ? 'Create Driver Account' : 'SafeRide Sign In'}
+            </h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-          >
+          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {error && (
-          <div className="p-3 bg-red-950/80 border border-red-800 text-red-300 rounded-lg text-xs font-medium">
+          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-lg font-medium">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {isSignup && (
             <div>
-              <label className="text-slate-400 font-medium block mb-1">Full Name</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
               <input
                 type="text"
                 required
-                placeholder="Ada Lovelace"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 focus:outline-none focus:border-red-500"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
               />
             </div>
           )}
 
           <div>
-            <label className="text-slate-400 font-medium block mb-1">Email Address</label>
-            <div className="relative">
-              <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 font-mono focus:outline-none focus:border-red-500"
-              />
-            </div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
+            />
           </div>
 
           <div>
-            <label className="text-slate-400 font-medium block mb-1">Password</label>
-            <div className="relative">
-              <Lock className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 font-mono focus:outline-none focus:border-red-500"
-              />
-            </div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
+            />
           </div>
 
           {isSignup && (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-slate-400 font-medium block mb-1">Role</label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="w-full px-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 focus:outline-none focus:border-red-500"
-                  >
-                    <option value="DRIVER">Driver</option>
-                    <option value="HOSPITAL">Hospital Base</option>
-                    <option value="RESPONDER">First Responder</option>
-                    <option value="ADMIN">System Admin</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-slate-400 font-medium block mb-1">Blood Group</label>
-                  <select
-                    value={bloodGroup}
-                    onChange={(e) => setBloodGroup(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 font-mono focus:outline-none focus:border-red-500"
-                  >
-                    <option value="O+">O+</option>
-                    <option value="O-">O-</option>
-                    <option value="A+">A+</option>
-                    <option value="A-">A-</option>
-                    <option value="B+">B+</option>
-                    <option value="B-">B-</option>
-                    <option value="AB+">AB+</option>
-                    <option value="AB-">AB-</option>
-                  </select>
-                </div>
-              </div>
-
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-slate-400 font-medium block mb-1">Primary Phone</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Phone</label>
                 <input
                   type="tel"
+                  required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 font-mono focus:outline-none focus:border-red-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg font-mono"
                 />
               </div>
-
               <div>
-                <label className="text-slate-400 font-medium block mb-1">Medical Conditions / Allergies</label>
-                <input
-                  type="text"
-                  value={medicalConditions}
-                  onChange={(e) => setMedicalConditions(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 text-slate-100 rounded-lg border border-slate-700 focus:outline-none focus:border-red-500"
-                />
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Blood Group</label>
+                <select
+                  value={bloodGroup}
+                  onChange={(e) => setBloodGroup(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white font-bold text-rose-700"
+                >
+                  <option value="O+">O+</option>
+                  <option value="O-">O-</option>
+                  <option value="A+">A+</option>
+                  <option value="A-">A-</option>
+                  <option value="B+">B+</option>
+                  <option value="B-">B-</option>
+                  <option value="AB+">AB+</option>
+                  <option value="AB-">AB-</option>
+                </select>
               </div>
-            </>
+            </div>
           )}
 
           <div className="pt-2">
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition shadow-md shadow-red-600/30 text-xs"
+              className="w-full py-2.5 rounded-lg text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 transition-colors shadow-xs"
             >
-              {loading ? 'Authenticating...' : isSignup ? 'Create Account' : 'Sign In'}
-            </button>
-          </div>
-
-          <div className="text-center pt-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsSignup(!isSignup);
-                setError(null);
-              }}
-              className="text-slate-400 hover:text-white text-xs underline underline-offset-4"
-            >
-              {isSignup ? 'Already have an account? Sign In' : "Don't have an account? Register as Driver"}
+              {loading ? 'Authenticating...' : isSignup ? 'Register & Protect' : 'Sign In'}
             </button>
           </div>
         </form>
+
+        <div className="text-center pt-2">
+          <button
+            type="button"
+            onClick={() => setIsSignup(!isSignup)}
+            className="text-xs text-slate-600 hover:text-slate-900 font-medium"
+          >
+            {isSignup ? 'Already have an account? Sign In' : "Don't have an account? Register"}
+          </button>
+        </div>
       </div>
     </div>
   );

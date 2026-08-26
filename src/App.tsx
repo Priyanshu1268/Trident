@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar, NavTabType } from './components/Navbar';
-import { AlertsCommandCenter } from './components/AlertsCommandCenter';
-import { VisionSafetyMonitor } from './components/VisionSafetyMonitor';
-import { VehicleFleetView } from './components/VehicleFleetView';
+import { DashboardOverview } from './components/DashboardOverview';
+import { SensorLiveView } from './components/SensorLiveView';
+import { ContactsManagerView } from './components/ContactsManagerView';
+import { MedicalProfileView } from './components/MedicalProfileView';
+import { AccidentHistoryView } from './components/AccidentHistoryView';
+import { HardwareStudioView } from './components/HardwareStudioView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SmsLogsView } from './components/SmsLogsView';
-import { HardwareStudioView } from './components/HardwareStudioView';
-import { EmergencyLockScreenView } from './components/EmergencyLockScreenView';
+import { VisionSafetyMonitor } from './components/VisionSafetyMonitor';
 import { CrashConfirmationModal } from './components/CrashConfirmationModal';
 import { TelemetrySimulatorModal } from './components/TelemetrySimulatorModal';
 import { AuthModal } from './components/AuthModal';
@@ -15,27 +17,91 @@ import {
   Vehicle, 
   AnalyticsSummary, 
   EmergencySmsLog, 
+  EmergencyContact,
+  MedicalProfileData,
   User, 
   AlertStatus, 
   TelemetryRequest,
-  HardwareTelemetry
+  HardwareTelemetry,
+  SystemHealthStatus
 } from './types';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<NavTabType>('alerts');
+  const [activeTab, setActiveTab] = useState<NavTabType>('dashboard');
   const [alerts, setAlerts] = useState<CrashAlert[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([
+    {
+      id: '1',
+      vehicleNumber: 'KA-01-SR-2026',
+      owner: 'John Doe',
+      emergencyContactPhone: '+91 98765 43210',
+      vehicleType: 'CAR',
+      modelName: 'SafeRide Smart Vehicle',
+      deviceId: 'ESP32-SAFERIDE-01'
+    }
+  ]);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [smsLogs, setSmsLogs] = useState<EmergencySmsLog[]>([]);
+  const [contacts, setContacts] = useState<EmergencyContact[]>([
+    {
+      id: '1',
+      name: 'Sarah Connor (Spouse)',
+      phone: '+91 98765 43210',
+      relationship: 'Spouse',
+      priority: 'PRIMARY',
+      notifyOnConfirmation: true
+    },
+    {
+      id: '2',
+      name: 'James Doe (Brother)',
+      phone: '+91 98111 22334',
+      relationship: 'Brother',
+      priority: 'SECONDARY',
+      notifyOnConfirmation: true
+    },
+    {
+      id: '3',
+      name: 'Apollo Trauma Hospital Emergency Desk',
+      phone: '+91 11 2692 5858',
+      relationship: 'Hospital EMS',
+      priority: 'TERTIARY',
+      notifyOnConfirmation: true
+    }
+  ]);
+  const [medicalProfile, setMedicalProfile] = useState<MedicalProfileData>({
+    bloodGroup: 'O+',
+    allergies: 'Penicillin, Aspirin',
+    chronicConditions: 'Mild Asthma',
+    medications: 'Salbutamol Inhaler (as needed)',
+    emergencyInstructions: 'Carry inhaler in front glove compartment. Penicillin allergy.',
+    organDonor: true,
+    emergencyDoctorName: 'Dr. Robert Vance (Cardiologist)',
+    emergencyDoctorPhone: '+91 98111 22334',
+    insuranceProvider: 'Star Health Premier',
+    insurancePolicyNumber: 'SH-2026-998812'
+  });
+
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [showSimulatorModal, setShowSimulatorModal] = useState<boolean>(false);
-  const [emergencyToast, setEmergencyToast] = useState<CrashAlert | null>(null);
   const [activeConfirmationAlert, setActiveConfirmationAlert] = useState<CrashAlert | null>(null);
   const [liveHardwareTelemetry, setLiveHardwareTelemetry] = useState<HardwareTelemetry | null>(null);
 
-  // Fetch all initial state from backend
+  // System Health state
+  const [systemHealth, setSystemHealth] = useState<SystemHealthStatus>({
+    deviceConnected: true,
+    mpu6050Active: true,
+    gsmAvailable: true,
+    internetConnected: true,
+    gpsAvailable: true,
+    csqSignal: 28,
+    batteryLevel: 94,
+    demoMode: true,
+    countdownDuration: 30
+  });
+
+  // Fetch initial data
   const fetchAlerts = useCallback(async () => {
     try {
       const res = await fetch('/api/v1/alerts');
@@ -53,7 +119,7 @@ export function App() {
       const res = await fetch('/api/v1/vehicles');
       if (res.ok) {
         const data = await res.json();
-        setVehicles(data);
+        if (data && data.length > 0) setVehicles(data);
       }
     } catch (err) {
       console.error('Error fetching vehicles:', err);
@@ -84,28 +150,27 @@ export function App() {
     }
   }, []);
 
-  // Initial Load
+  // Initial Load & Auth check
   useEffect(() => {
     fetchAlerts();
     fetchVehicles();
     fetchAnalytics();
     fetchSmsLogs();
 
-    // Check localStorage for saved auth
-    const savedToken = localStorage.getItem('trident_token');
-    const savedUser = localStorage.getItem('trident_user');
+    const savedToken = localStorage.getItem('saferide_token');
+    const savedUser = localStorage.getItem('saferide_user');
     if (savedToken && savedUser) {
       try {
         setToken(savedToken);
         setUser(JSON.parse(savedUser));
       } catch {
-        localStorage.removeItem('trident_token');
-        localStorage.removeItem('trident_user');
+        localStorage.removeItem('saferide_token');
+        localStorage.removeItem('saferide_user');
       }
     }
   }, [fetchAlerts, fetchVehicles, fetchAnalytics, fetchSmsLogs]);
 
-  // Connect to Live Server-Sent Events (SSE) Stream
+  // Server-Sent Events (SSE) live updates
   useEffect(() => {
     const eventSource = new EventSource('/api/events');
 
@@ -115,13 +180,8 @@ export function App() {
         setAlerts((prev) => [newAlert, ...prev.filter((a) => a.id !== newAlert.id)]);
         fetchAnalytics();
         fetchSmsLogs();
-
-        if (newAlert.severity === 'HIGH' && newAlert.status !== 'CONFIRMATION_COUNTDOWN') {
-          setEmergencyToast(newAlert);
-          setTimeout(() => setEmergencyToast(null), 6000);
-        }
       } catch (e) {
-        console.error('SSE new_alert parse error:', e);
+        console.error('SSE new_alert error:', e);
       }
     });
 
@@ -151,15 +211,10 @@ export function App() {
 
     eventSource.addEventListener('crash_escalated', (event) => {
       try {
-        const data = JSON.parse(event.data);
         setActiveConfirmationAlert(null);
         fetchAlerts();
         fetchAnalytics();
         fetchSmsLogs();
-        if (data.alert) {
-          setEmergencyToast(data.alert);
-          setTimeout(() => setEmergencyToast(null), 7000);
-        }
       } catch (e) {
         console.error('SSE crash_escalated error:', e);
       }
@@ -174,60 +229,10 @@ export function App() {
       }
     });
 
-    eventSource.addEventListener('alert_updated', (event) => {
-      try {
-        const updatedAlert = JSON.parse(event.data);
-        setAlerts((prev) => prev.map((a) => (a.id === updatedAlert.id ? updatedAlert : a)));
-        fetchAnalytics();
-      } catch (e) {
-        console.error('SSE alert_updated parse error:', e);
-      }
-    });
-
     return () => {
       eventSource.close();
     };
   }, [fetchAlerts, fetchAnalytics, fetchSmsLogs, activeConfirmationAlert]);
-
-  // Alert Actions
-  const handleUpdateAlertStatus = async (alertId: number, status: AlertStatus, notes?: string) => {
-    try {
-      const res = await fetch(`/api/v1/alerts/${alertId}/respond`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, notes }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setAlerts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
-        fetchAnalytics();
-      }
-    } catch (err) {
-      console.error('Error updating alert status:', err);
-    }
-  };
-
-  const handleTriggerPreset = async (scenario: string) => {
-    try {
-      const res = await fetch('/api/v1/alerts/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario }),
-      });
-      if (res.ok) {
-        const alert = await res.json();
-        setAlerts((prev) => [alert, ...prev.filter((a) => a.id !== alert.id)]);
-        fetchAnalytics();
-        fetchSmsLogs();
-        if (alert.severity === 'HIGH') {
-          setEmergencyToast(alert);
-          setTimeout(() => setEmergencyToast(null), 6000);
-        }
-      }
-    } catch (err) {
-      console.error('Error triggering preset:', err);
-    }
-  };
 
   const handleSendTelemetry = async (data: TelemetryRequest) => {
     const res = await fetch('/api/v1/telemetry', {
@@ -260,119 +265,107 @@ export function App() {
     return result;
   };
 
-  const handleCancelSafe = async (alertId: number, reason: string) => {
+  const handleCancelCountdown = async () => {
+    if (!activeConfirmationAlert) return;
     try {
-      const res = await fetch('/api/v1/hardware/timer-cancel', {
+      await fetch('/api/v1/hardware/timer-cancel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alertId, reason }),
+        body: JSON.stringify({ alertId: activeConfirmationAlert.id, reason: 'Driver cancelled false alarm in UI' }),
       });
-      if (res.ok) {
-        setActiveConfirmationAlert(null);
-        fetchAlerts();
-        fetchAnalytics();
-      }
+      setActiveConfirmationAlert(null);
+      fetchAlerts();
+      fetchAnalytics();
     } catch (err) {
       console.error('Failed to cancel countdown', err);
     }
   };
 
-  const handleExpireEscalate = async (alertId: number) => {
+  const handleConfirmCountdownNow = async () => {
+    if (!activeConfirmationAlert) return;
     try {
-      const res = await fetch('/api/v1/hardware/timer-expire', {
+      await fetch('/api/v1/hardware/timer-expire', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alertId }),
+        body: JSON.stringify({ alertId: activeConfirmationAlert.id }),
       });
-      if (res.ok) {
-        setActiveConfirmationAlert(null);
-        fetchAlerts();
-        fetchAnalytics();
-        fetchSmsLogs();
-      }
+      setActiveConfirmationAlert(null);
+      fetchAlerts();
+      fetchAnalytics();
+      fetchSmsLogs();
     } catch (err) {
-      console.error('Failed to expire countdown', err);
+      console.error('Failed to escalate countdown', err);
     }
   };
 
-  const handleRegisterVehicle = async (data: Partial<Vehicle>) => {
-    const res = await fetch('/api/v1/vehicles/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const errData = await res.json();
-      throw new Error(errData.error || 'Failed to register vehicle');
-    }
-    const newVehicle = await res.json();
-    setVehicles((prev) => [...prev, newVehicle]);
-  };
-
-  const handleFetchVehicleHistory = async (vehicleNumber: string) => {
-    const res = await fetch(`/api/v1/analytics/history/${encodeURIComponent(vehicleNumber)}`);
-    if (!res.ok) throw new Error('Failed to fetch vehicle crash history');
-    return await res.json();
+  const handleSaveMedicalProfile = (newProfile: MedicalProfileData) => {
+    setMedicalProfile(newProfile);
   };
 
   const handleLoginSuccess = (loggedInUser: User, jwtToken: string) => {
     setUser(loggedInUser);
     setToken(jwtToken);
-    localStorage.setItem('trident_token', jwtToken);
-    localStorage.setItem('trident_user', JSON.stringify(loggedInUser));
+    localStorage.setItem('saferide_token', jwtToken);
+    localStorage.setItem('saferide_user', JSON.stringify(loggedInUser));
   };
 
   const handleLogout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('trident_token');
-    localStorage.removeItem('trident_user');
+    localStorage.removeItem('saferide_token');
+    localStorage.removeItem('saferide_user');
   };
 
-  const pendingAlertsCount = alerts.filter((a) => a.status === 'PENDING' || a.status === 'AMBULANCE_DISPATCHED' || a.status === 'CONFIRMATION_COUNTDOWN').length;
-
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-red-500 selection:text-white">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col antialiased">
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        pendingAlertsCount={pendingAlertsCount}
+        onSelectTab={setActiveTab}
         user={user}
         onOpenAuth={() => setShowAuthModal(true)}
-        onOpenSimulator={() => setShowSimulatorModal(true)}
         onLogout={handleLogout}
+        onOpenSimulator={() => setShowSimulatorModal(true)}
+        systemHealth={systemHealth}
       />
 
-      {/* High Severity Emergency Alert Toast Banner */}
-      {emergencyToast && (
-        <div className="sticky top-16 z-40 bg-red-600 text-white px-4 py-3 shadow-2xl flex items-center justify-between animate-bounce">
-          <div className="max-w-7xl mx-auto flex items-center space-x-3 w-full">
-            <span className="p-1.5 bg-red-950 rounded-lg font-mono font-bold text-xs">CRITICAL SOS</span>
-            <p className="text-xs sm:text-sm font-bold">
-              High Severity Crash: {emergencyToast.vehicle?.vehicleNumber} ({emergencyToast.gForce}g impact). Automated calls and trauma ambulance dispatched!
-            </p>
-            <button
-              onClick={() => {
-                setActiveTab('alerts');
-                setEmergencyToast(null);
-              }}
-              className="ml-auto px-3 py-1 bg-white text-red-700 rounded-lg text-xs font-extrabold hover:bg-slate-100"
-            >
-              View Triage
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content View Container */}
+      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {activeTab === 'alerts' && (
-          <AlertsCommandCenter
-            alerts={alerts}
-            onUpdateStatus={handleUpdateAlertStatus}
-            onTriggerPreset={handleTriggerPreset}
+        {activeTab === 'dashboard' && (
+          <DashboardOverview
+            systemHealth={systemHealth}
+            vehicle={vehicles[0] || null}
+            emergencyContacts={contacts}
+            latestAlert={alerts[0] || null}
+            onNavigate={setActiveTab}
+            onSimulateCrash={() => setShowSimulatorModal(true)}
           />
+        )}
+
+        {activeTab === 'telemetry' && (
+          <SensorLiveView
+            liveTelemetry={liveHardwareTelemetry}
+          />
+        )}
+
+        {activeTab === 'contacts' && (
+          <ContactsManagerView
+            contacts={contacts}
+            onUpdateContacts={setContacts}
+          />
+        )}
+
+        {activeTab === 'medical' && (
+          <MedicalProfileView
+            initialProfile={medicalProfile}
+            userName={user?.name || 'John Doe'}
+            userPhone={user?.phone || '+91 98765 43210'}
+            onSaveProfile={handleSaveMedicalProfile}
+          />
+        )}
+
+        {activeTab === 'history' && (
+          <AccidentHistoryView alerts={alerts} />
         )}
 
         {activeTab === 'hardware' && (
@@ -383,45 +376,29 @@ export function App() {
           />
         )}
 
-        {activeTab === 'lockscreen' && (
-          <EmergencyLockScreenView
-            currentVehicleNumber={vehicles[0]?.vehicleNumber || 'KA-01-AI-2026'}
-            vehicles={vehicles}
-          />
+        {activeTab === 'analytics' && (
+          <AnalyticsView analytics={analytics} />
+        )}
+
+        {activeTab === 'messages' && (
+          <SmsLogsView logs={smsLogs} />
         )}
 
         {activeTab === 'vision' && (
           <VisionSafetyMonitor onSendTelemetry={handleSendTelemetry} />
         )}
-
-        {activeTab === 'fleet' && (
-          <VehicleFleetView
-            vehicles={vehicles}
-            onRegisterVehicle={handleRegisterVehicle}
-            onFetchVehicleHistory={handleFetchVehicleHistory}
-          />
-        )}
-
-        {activeTab === 'analytics' && (
-          <AnalyticsView analytics={analytics} />
-        )}
-
-        {activeTab === 'sms' && (
-          <SmsLogsView logs={smsLogs} />
-        )}
       </main>
 
-      {/* Crash Confirmation Safety Countdown Modal */}
+      {/* Crash Confirmation Safety Modal */}
       {activeConfirmationAlert && (
         <CrashConfirmationModal
           alert={activeConfirmationAlert}
-          totalSeconds={activeConfirmationAlert.confirmationCountdown || 20}
-          onCancelSafe={handleCancelSafe}
-          onExpireEscalate={handleExpireEscalate}
+          onCancel={handleCancelCountdown}
+          onConfirmNow={handleConfirmCountdownNow}
         />
       )}
 
-      {/* Telemetry Simulator Modal */}
+      {/* Quick Telemetry Injector Modal */}
       {showSimulatorModal && (
         <TelemetrySimulatorModal
           vehicles={vehicles}
@@ -430,7 +407,7 @@ export function App() {
         />
       )}
 
-      {/* Auth Modal */}
+      {/* Authentication Modal */}
       {showAuthModal && (
         <AuthModal
           onClose={() => setShowAuthModal(false)}
@@ -438,13 +415,15 @@ export function App() {
         />
       )}
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-slate-800/80 bg-slate-900/50 py-4 text-center text-xs text-slate-500 font-mono">
-        TRIDENT EMERGENCY SAFETY PLATFORM &bull; ESP32 + MPU6050 + SIM800L HARDWARE ENGINE &bull; AI VISION &bull; REAL-TIME EMERGENCY DISPATCH
+      {/* Clean Light Footer */}
+      <footer className="mt-auto border-t border-slate-200 bg-white py-4 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>SafeRide AI &bull; Autonomous Emergency Accident Detection & Rapid-Response System</span>
+          <span className="font-mono text-slate-400">ESP32 &bull; MPU6050 &bull; SIM800L &bull; FastAPI AI Engine &bull; DEMO_MODE: TRUE</span>
+        </div>
       </footer>
     </div>
   );
 }
 
 export default App;
-

@@ -1,27 +1,87 @@
-# Trident | AI Crash Response & Telemetry Safety System
+# SafeRide AI — Autonomous Vehicle Accident Detection & Emergency Response Platform
 
-A production-ready full-stack AI emergency crash response, vision safety monitoring, and vehicle telemetry management platform.
+An end-to-end IoT, AI, and emergency response system connecting physical embedded hardware (ESP32, MPU6050, SIM800L, Buzzer, SOS Switch) with a real-time web monitoring and multi-tier emergency dispatch platform.
 
-## Features
+---
 
-- **Live Triage Command Center**: Real-time crash telemetry ingestion, G-force impact severity calculation, and instant auto-dispatching for trauma responders.
-- **AI Vision Safety Feed**: Real-time YOLO model detection for helmet compliance and road pothole hazards with live telemetry broadcast and cooldown controls.
-- **Connected Fleet & Medical Passport**: Vehicle registry with driver medical profile integration (blood group, allergies, conditions, and emergency contacts).
-- **Emergency Cellular SMS Broadcast**: Automated SMS dispatch logs with precise GPS coordinates, impact velocity, and driver medical passport data.
-- **Analytics & SLA Dashboard**: Real-time response time tracking, severity breakdown, and 24-hour crash distribution charts.
-- **Full REST API & Real-time SSE**: Complete endpoints compatible with the original Spring Boot and Python architectures.
+## 🚀 System Architecture
 
-## API Endpoints
+```
+                                  [ PHYSICAL HARDWARE ]
+                     +----------------------------------------------+
+                     | ESP32 Microcontroller (NodeMCU-32S)          |
+                     | ├─ MPU6050 6-Axis IMU (I2C GPIO 21/22)       |
+                     | ├─ SIM800L GSM Modem (UART GPIO 16/17)       |
+                     | ├─ Active Siren Buzzer (GPIO 23)             |
+                     | ├─ Physical Emergency SOS Button (GPIO 18)   |
+                     | └─ Li-Ion / DC-DC 4.0V 3A Power Subsystem    |
+                     +----------------------+-----------------------+
+                                            |
+                         (WebSerial USB / REST / MQTT)
+                                            |
+                                            v
+                                [ SAFERIDE CLOUD / EDGE ]
+                     +----------------------------------------------+
+                     | Full-Stack Node.js / Express / TypeScript    |
+                     | ├─ Real-Time SSE Ingestion & Broadcast       |
+                     | ├─ 30s Driver False-Alarm Cancellation Engine|
+                     | ├─ Multi-Tier Escalation Dispatcher (SMS/Call|
+                     | └─ In Case of Emergency (ICE) Medical Pass   |
+                     +----------------------+-----------------------+
+                                            |
+                                            v
+                                   [ AI / ML ENGINE ]
+                     +----------------------------------------------+
+                     | FastAPI ML Microservice (Python)             |
+                     | ├─ Kinematic Feature Extractor (500ms window)|
+                     | ├─ Random Forest Impact Classifier           |
+                     | ├─ Pothole & Bump False-Positive Filter      |
+                     | └─ Vision AI (Helmet & Road Hazard Detector) |
+                     +----------------------------------------------+
+```
 
-- `POST /api/v1/auth/signup` - Register driver/responder profile
-- `POST /api/v1/auth/login` - Authenticate and receive JWT
-- `POST /api/v1/telemetry` - Ingest telemetry, calculate severity, and trigger auto-dispatch
-- `GET /api/v1/alerts` - List active and historical crash alerts
-- `PUT /api/v1/alerts/:id/respond` - Update alert status (Dispatch Ambulance, Notify Hospital, Resolve)
-- `POST /api/v1/alerts/simulate` - Trigger simulated crash telemetry scenarios
-- `GET /api/v1/vehicles` - List registered connected fleet
-- `POST /api/v1/vehicles/register` - Register a new vehicle and driver
-- `GET /api/v1/analytics/summary` - Aggregate system KPIs and crash distribution
-- `GET /api/v1/analytics/history/:vehicleNumber` - Vehicle-specific crash logs
-- `GET /api/v1/sms/logs` - Cellular SMS emergency broadcast logs
-- `GET /api/events` - Server-Sent Events (SSE) live real-time stream
+---
+
+## 🛠️ Hardware Wiring & Breadboard Connections
+
+### Pinout Table
+
+| Component | Pin | Connected To | Description |
+| :--- | :--- | :--- | :--- |
+| **MPU-6050** | `VCC` | ESP32 `3V3` | 3.3V Power |
+| | `GND` | Common Ground Rail | Shared Ground |
+| | `SCL` | ESP32 `GPIO 22` | I2C Clock |
+| | `SDA` | ESP32 `GPIO 21` | I2C Data |
+| | `INT` | ESP32 `GPIO 19` | Hardware motion interrupt (optional) |
+| **SIM800L** | `VCC / NET` | **External 4.0V 2A Rail** | Dedicated battery / buck converter output (**NEVER ESP32 3.3V/5V**) |
+| | `GND` | Common Ground Rail | **Shared Ground with ESP32 GND** |
+| | `TXD` | ESP32 `GPIO 16 (RX2)` | Hardware UART2 RX |
+| | `RXD` | ESP32 `GPIO 17 (TX2)` | Hardware UART2 TX (via 1kΩ/2kΩ divider) |
+| **Buzzer** | `Positive (+)` | ESP32 `GPIO 23` | Active alarm output |
+| | `Negative (-)` | Common Ground Rail | Ground |
+| **SOS Button** | `Leg 1` | ESP32 `3V3` | 3.3V pull-up |
+| | `Leg 2` | ESP32 `GPIO 18` + 10kΩ GND | Digital input with pull-down resistor |
+
+> Detailed diagrams and safety specs are available in `/hardware/wiring.md` and `/hardware/bill-of-materials.md`.
+
+---
+
+## 🧠 AI / ML Engine & Pothole Classification
+
+The ML pipeline is trained on 6-axis kinematic time-series to classify vehicular dynamics:
+- **Random Forest Classifier** (`n_estimators=100`, `max_depth=8`)
+- **Extracted Features**: Resultant $g$-force magnitude, rate of change ($\text{jerk}$ $dg/dt$), angular velocity ($\omega_{gyro}$), roll/pitch stability.
+- **Pothole Rejection**: Vertical spikes ($a_z \approx 1.8g - 3.2g$, $<50\text{ms}$) with low angular tilt ($\Delta\theta < 8^\circ$) are classified as non-accident road hazards to eliminate false emergency calls.
+- **Computer Vision Monitor**: Dashcam/helmet stream hazard analysis detecting helmets and road surface depressions.
+
+---
+
+## 💻 Repository Structure
+
+- `/firmware/`: Complete C++ PlatformIO/Arduino sketch (`main.cpp`, `AccidentDetector.h`, `SIM800LModule.h`).
+- `/hardware/`: Wiring schematics, breadboard layout, and Bill of Materials (BOM).
+- `/ai-service/`: FastAPI Python microservice with model training script (`train_accident_model.py`).
+- `/src/`: React 18, TypeScript, and Tailwind CSS client application.
+- `/server.ts`: Express backend with real-time SSE stream, emergency dispatch engine, and REST API.
+- `/docker-compose.yml`: Multi-container deployment configuration.
+
