@@ -263,3 +263,29 @@ export interface SystemHealthStatus {
   demoMode: boolean;
   countdownDuration: number;
 }
+
+export interface YoloModelInfo {
+  id: string;
+  name: string;
+  filename: string;
+  version: string;
+  description: string;
+  classes: string[];
+  sizeMb: number;
+  parameters: string;
+  accuracyMap50: number;
+  inferenceTimeMs: number;
+  status: string;
+  targetFps: number;
+  confidenceThreshold: number;
+  autoAlertSeverity: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface VisionDetection {
+  id: string;
+  class: string;
+  confidence: number;
+  bbox: [number, number, number, number]; // [x, y, w, h] or [x1, y1, x2, y2]
+  color: string;
+  isViolation?: boolean;
+}

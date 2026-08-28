@@ -22,8 +22,20 @@ import {
   HelpCircle,
   ExternalLink,
   Code,
-  Gauge
+  Gauge,
+  CheckCircle2
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ReferenceLine 
+} from 'recharts';
 import { HardwareTelemetry, HardwareDeviceConfig, EmergencyCallLog } from '../types';
 
 interface HardwareStudioViewProps {
@@ -44,14 +56,37 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Live sensor test controls
+  // Live sensor readings
   const [testGForce, setTestGForce] = useState<number>(1.0);
   const [testPitch, setTestPitch] = useState<number>(0);
   const [testRoll, setTestRoll] = useState<number>(0);
+  const [testAx, setTestAx] = useState<number>(0);
+  const [testAy, setTestAy] = useState<number>(0);
+  const [testAz, setTestAz] = useState<number>(1.0);
   const [testSpeed, setTestSpeed] = useState<number>(55);
   const [testVehicleNumber, setTestVehicleNumber] = useState<string>('KA-01-SR-2026');
   const [testBattery, setTestBattery] = useState<number>(4.12);
   const [testCsq, setTestCsq] = useState<number>(28);
+  const [testSos, setTestSos] = useState<boolean>(false);
+
+  // Real-time oscilloscope chart history
+  const [chartHistory, setChartHistory] = useState<any[]>(() => {
+    const initial = [];
+    const now = Date.now();
+    for (let i = 25; i >= 0; i--) {
+      const d = new Date(now - i * 500);
+      initial.push({
+        time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        gForce: 1.0,
+        pitch: 0.0,
+        roll: 0.0,
+        ax: 0.0,
+        ay: 0.0,
+        az: 1.0,
+      });
+    }
+    return initial;
+  });
 
   // WebSerial state
   const [serialConnected, setSerialConnected] = useState<boolean>(false);
@@ -64,6 +99,7 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
   const serialPortRef = useRef<any>(null);
   const serialReaderRef = useRef<any>(null);
   const virtualIntervalRef = useRef<any>(null);
+  const lastCrashTriggerTimeRef = useRef<number>(0);
 
   // Fetch registered devices and call logs
   const fetchData = async () => {
@@ -85,6 +121,68 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
+  // Update chart history point
+  const pushChartPoint = (g: number, p: number, r: number, ax = 0, ay = 0, az = 1) => {
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    setChartHistory((prev) => [
+      ...prev.slice(-35),
+      {
+        time: timeStr,
+        gForce: parseFloat(g.toFixed(2)),
+        pitch: parseFloat(p.toFixed(1)),
+        roll: parseFloat(r.toFixed(1)),
+        ax: parseFloat(ax.toFixed(2)),
+        ay: parseFloat(ay.toFixed(2)),
+        az: parseFloat(az.toFixed(2)),
+      },
+    ]);
+  };
+
+  // Process incoming telemetry packet
+  const handleIncomingTelemetryData = (pkt: {
+    gForce?: number;
+    ax?: number;
+    ay?: number;
+    az?: number;
+    pitch?: number;
+    roll?: number;
+    sosButtonPressed?: boolean;
+    csq?: number;
+    batteryVoltage?: number;
+    deviceId?: string;
+    vehicleNumber?: string;
+  }) => {
+    const g = typeof pkt.gForce === 'number' ? pkt.gForce : 1.0;
+    const p = typeof pkt.pitch === 'number' ? pkt.pitch : 0.0;
+    const r = typeof pkt.roll === 'number' ? pkt.roll : 0.0;
+    const ax = typeof pkt.ax === 'number' ? pkt.ax : 0.0;
+    const ay = typeof pkt.ay === 'number' ? pkt.ay : 0.0;
+    const az = typeof pkt.az === 'number' ? pkt.az : 1.0;
+    const sos = Boolean(pkt.sosButtonPressed);
+
+    setTestGForce(g);
+    setTestPitch(p);
+    setTestRoll(r);
+    setTestAx(ax);
+    setTestAy(ay);
+    setTestAz(az);
+    setTestSos(sos);
+    if (typeof pkt.csq === 'number') setTestCsq(pkt.csq);
+    if (typeof pkt.batteryVoltage === 'number') setTestBattery(pkt.batteryVoltage);
+
+    pushChartPoint(g, p, r, ax, ay, az);
+
+    // Auto-detect crash thresholds
+    const isImpact = g >= 3.5;
+    const isRollover = Math.abs(r) >= 50 || Math.abs(p) >= 50;
+    const now = Date.now();
+
+    if ((isImpact || isRollover || sos) && now - lastCrashTriggerTimeRef.current > 10000) {
+      lastCrashTriggerTimeRef.current = now;
+      handleTriggerImpact(g, sos);
+    }
+  };
+
   // Virtual ESP32 Serial Live Stream generator
   const toggleVirtualSerialStream = () => {
     if (virtualStreamActive) {
@@ -105,19 +203,28 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
       ]);
 
       virtualIntervalRef.current = setInterval(() => {
-        const noiseAx = (Math.random() * 0.1 - 0.05).toFixed(2);
-        const noiseAy = (Math.random() * 0.1 - 0.05).toFixed(2);
-        const noiseAz = (1.0 + Math.random() * 0.06 - 0.03).toFixed(2);
-        const totalG = Math.sqrt(
-          parseFloat(noiseAx) ** 2 + parseFloat(noiseAy) ** 2 + parseFloat(noiseAz) ** 2
-        ).toFixed(2);
-        const randPitch = (Math.random() * 2 - 1).toFixed(1);
-        const randRoll = (Math.random() * 2 - 1).toFixed(1);
+        const noiseAx = parseFloat((Math.random() * 0.1 - 0.05).toFixed(2));
+        const noiseAy = parseFloat((Math.random() * 0.1 - 0.05).toFixed(2));
+        const noiseAz = parseFloat((1.0 + Math.random() * 0.06 - 0.03).toFixed(2));
+        const totalG = parseFloat(Math.sqrt(noiseAx ** 2 + noiseAy ** 2 + noiseAz ** 2).toFixed(2));
+        const randPitch = parseFloat((Math.random() * 3 - 1.5).toFixed(1));
+        const randRoll = parseFloat((Math.random() * 3 - 1.5).toFixed(1));
 
-        const frame = `[ESP32_DATA] AX=${noiseAx} AY=${noiseAy} AZ=${noiseAz} G=${totalG}g P=${randPitch} R=${randRoll} CSQ=28 BAT=4.12V`;
+        handleIncomingTelemetryData({
+          gForce: totalG,
+          ax: noiseAx,
+          ay: noiseAy,
+          az: noiseAz,
+          pitch: randPitch,
+          roll: randRoll,
+          sosButtonPressed: false,
+          csq: 28,
+          batteryVoltage: 4.12
+        });
 
+        const frame = `{"deviceId":"ESP32-DEV-01","gForce":${totalG},"ax":${noiseAx},"ay":${noiseAy},"az":${noiseAz},"pitch":${randPitch},"roll":${randRoll},"sosButtonPressed":false}`;
         setSerialLogs((prev) => [...prev.slice(-40), frame]);
-      }, 1500);
+      }, 500);
     }
   };
 
@@ -127,11 +234,11 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     };
   }, []);
 
-  // WebSerial Handler with Graceful Fallback
+  // WebSerial Handler
   const handleConnectSerial = async () => {
     if (!('serial' in navigator)) {
       setSerialPermissionWarning(
-        'WebSerial API is not supported in this browser. You can use the built-in "Virtual ESP32 Stream" simulation mode below.'
+        'WebSerial API is not supported in this browser. Please use Google Chrome or Microsoft Edge, or use the Virtual Stream mode.'
       );
       return;
     }
@@ -158,7 +265,7 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
       console.warn('WebSerial request failed:', err);
       if (err.name === 'SecurityError' || err.message?.includes('permissions policy') || err.message?.includes('disallowed')) {
         setSerialPermissionWarning(
-          'WebSerial access is restricted inside iframe embeds. Use the "Start Virtual ESP32 Stream" button below to simulate physical hardware telemetry.'
+          'WebSerial access is restricted. Use the "Start Virtual ESP32 Stream" button below to simulate physical hardware telemetry.'
         );
       } else {
         setSerialPermissionWarning(`Serial connection notice: ${err.message}`);
@@ -180,7 +287,29 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
           for (const line of lines) {
             const cleanLine = line.trim();
             if (cleanLine) {
-              setSerialLogs((prev) => [...prev.slice(-40), `[USB-UART] ${cleanLine}`]);
+              setSerialLogs((prev) => [...prev.slice(-40), cleanLine]);
+
+              // Attempt JSON parsing from ESP32 stream
+              try {
+                if (cleanLine.startsWith('{') && cleanLine.endsWith('}')) {
+                  const data = JSON.parse(cleanLine);
+                  handleIncomingTelemetryData(data);
+                } else if (cleanLine.includes('gForce') || cleanLine.includes('pitch') || cleanLine.includes('roll')) {
+                  // Fallback string matching if JSON fragment
+                  const gMatch = cleanLine.match(/gForce["':\s]+([0-9.-]+)/i);
+                  const pMatch = cleanLine.match(/pitch["':\s]+([0-9.-]+)/i);
+                  const rMatch = cleanLine.match(/roll["':\s]+([0-9.-]+)/i);
+                  if (gMatch || pMatch || rMatch) {
+                    handleIncomingTelemetryData({
+                      gForce: gMatch ? parseFloat(gMatch[1]) : undefined,
+                      pitch: pMatch ? parseFloat(pMatch[1]) : undefined,
+                      roll: rMatch ? parseFloat(rMatch[1]) : undefined,
+                    });
+                  }
+                }
+              } catch (parseErr) {
+                // Non-JSON diagnostic logs (e.g. [INIT] [OK] etc)
+              }
             }
           }
         }
@@ -215,9 +344,9 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     const payload = {
       deviceId: selectedDevice,
       vehicleNumber: testVehicleNumber,
-      ax: 0.2,
-      ay: 0.3,
-      az: gVal,
+      ax: testAx,
+      ay: testAy,
+      az: testAz,
       gForce: gVal,
       pitch: testPitch,
       roll: testRoll,
@@ -232,7 +361,7 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
 
     setSerialLogs((prev) => [
       ...prev.slice(-40),
-      `[SIMULATOR -> SERVER] Sent Telemetry: G=${gVal}g | Pitch=${testPitch}° | Roll=${testRoll}° | SOS=${isSos}`,
+      `[CRASH ALERT TRIGGERED] G=${gVal}g | Pitch=${testPitch}° | Roll=${testRoll}° | SOS=${isSos}`,
     ]);
 
     try {
@@ -507,6 +636,73 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
               <span className="text-[11px] text-slate-500 font-mono block">
                 Power Rail: <strong>4.12V Regulated</strong>
               </span>
+            </div>
+          </div>
+
+          {/* Real-time Oscilloscope Chart */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2">
+                <Activity className="w-5 h-5 text-indigo-600 animate-pulse" />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Live Motion & Tilt Waveform Oscilloscope
+                </h3>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  serialConnected 
+                    ? 'bg-emerald-100 text-emerald-800' 
+                    : virtualStreamActive 
+                    ? 'bg-amber-100 text-amber-800' 
+                    : 'bg-slate-100 text-slate-700'
+                }`}>
+                  {serialConnected ? 'LIVE USB SERIAL (115200 BAUD)' : virtualStreamActive ? 'VIRTUAL STREAM ACTIVE' : 'MANUAL / STANDBY'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs font-mono">
+                <span className="flex items-center gap-1.5 text-slate-700">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-900 inline-block" />
+                  G-Force: <strong>{testGForce.toFixed(2)}g</strong>
+                </span>
+                <span className="flex items-center gap-1.5 text-indigo-600">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block" />
+                  Pitch: <strong>{testPitch}°</strong>
+                </span>
+                <span className="flex items-center gap-1.5 text-emerald-600">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
+                  Roll: <strong>{testRoll}°</strong>
+                </span>
+              </div>
+            </div>
+
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartHistory} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#64748b' }} stroke="#cbd5e1" />
+                  <YAxis yAxisId="left" domain={[0, 8]} tick={{ fontSize: 10, fill: '#64748b' }} stroke="#cbd5e1" label={{ value: 'G-Force (g)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 10 } }} />
+                  <YAxis yAxisId="right" orientation="right" domain={[-90, 90]} tick={{ fontSize: 10, fill: '#64748b' }} stroke="#cbd5e1" label={{ value: 'Angle (°)', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 10 } }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderRadius: '8px',
+                      border: 'none',
+                      color: '#fff',
+                      fontSize: '11px',
+                    }}
+                  />
+                  <ReferenceLine yAxisId="left" y={3.5} stroke="#f43f5e" strokeDasharray="4 4" label={{ value: 'Crash Limit (3.5g)', fill: '#f43f5e', fontSize: 10, position: 'insideTopLeft' }} />
+                  <ReferenceLine yAxisId="right" y={45} stroke="#f59e0b" strokeDasharray="3 3" />
+                  <ReferenceLine yAxisId="right" y={-45} stroke="#f59e0b" strokeDasharray="3 3" />
+                  <Line yAxisId="left" type="monotone" dataKey="gForce" name="G-Force (g)" stroke="#0f172a" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="pitch" name="Pitch (°)" stroke="#6366f1" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="roll" name="Roll (°)" stroke="#10b981" strokeWidth={2} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-lg">
+              <span>Dynamic sliding window updating continuously from breadboard MPU-6050 I2C stream.</span>
+              <span>Rollover Warning Threshold: <strong>±45°</strong> | Impact Trigger: <strong>&ge; 3.50g</strong></span>
             </div>
           </div>
 

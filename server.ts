@@ -756,13 +756,114 @@ app.get('/api/v1/sms/logs', (req, res) => {
   return res.json(smsLogs);
 });
 
+let visionStats = {
+  totalInferences: 12480,
+  helmetChecks: 8420,
+  helmetViolations: 34,
+  potholesDetected: 19,
+  trafficObjectsTracked: 4120,
+  avgFps: 29.8,
+  avgLatencyMs: 24,
+  activeModels: ['yolov8_helmet.pt', 'yolov8_pothole.pt', 'yolov8n.pt']
+};
+
+const yoloModelRegistry = [
+  {
+    id: 'yolov8_helmet',
+    name: 'YOLOv8 Helmet Safety Guardian',
+    filename: 'yolov8_helmet.pt',
+    version: 'v8.1.0-helmet-ft',
+    description: 'Specialized deep learning model trained on two-wheeler riders for helmet compliance verification and violation dispatching.',
+    classes: ['helmet', 'no_helmet', 'head', 'face', 'motorcycle_rider'],
+    sizeMb: 6.2,
+    parameters: '3.2M',
+    accuracyMap50: 0.948,
+    inferenceTimeMs: 16.4,
+    status: 'READY_ACTIVE',
+    targetFps: 30,
+    confidenceThreshold: 0.45,
+    autoAlertSeverity: 'LOW',
+  },
+  {
+    id: 'yolov8_pothole',
+    name: 'YOLOv8 Road Hazard & Pothole Classifier',
+    filename: 'yolov8_pothole.pt',
+    version: 'v8.1.0-pothole-ft',
+    description: 'Road surface defect neural network detecting potholes, asphalt cracks, and speed bumps to pre-warn riders and corroborate impact shocks.',
+    classes: ['pothole', 'crack', 'road_damage', 'manhole_cover', 'speed_bump'],
+    sizeMb: 6.3,
+    parameters: '3.2M',
+    accuracyMap50: 0.924,
+    inferenceTimeMs: 18.2,
+    status: 'READY_ACTIVE',
+    targetFps: 30,
+    confidenceThreshold: 0.40,
+    autoAlertSeverity: 'MEDIUM',
+  },
+  {
+    id: 'yolov8n',
+    name: 'YOLOv8 Nano Multiclass Core',
+    filename: 'yolov8n.pt',
+    version: 'v8.1.0-nano-base',
+    description: 'High-speed object detector for surrounding traffic, cross-traffic vehicles, cyclists, pedestrians, and immediate collision hazards.',
+    classes: ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'traffic light', 'stop sign'],
+    sizeMb: 6.2,
+    parameters: '3.2M',
+    accuracyMap50: 0.895,
+    inferenceTimeMs: 14.1,
+    status: 'READY_ACTIVE',
+    targetFps: 35,
+    confidenceThreshold: 0.50,
+    autoAlertSeverity: 'HIGH',
+  }
+];
+
+app.get('/api/v1/vision/models', (req, res) => {
+  return res.json(yoloModelRegistry);
+});
+
+app.get('/api/v1/vision/stats', (req, res) => {
+  return res.json(visionStats);
+});
+
+app.post('/api/v1/vision/inference', (req, res) => {
+  const { modelId, detections, frameWidth, frameHeight, vehicleNumber } = req.body;
+  visionStats.totalInferences++;
+
+  const detectionList = Array.isArray(detections) ? detections : [];
+  for (const d of detectionList) {
+    const label = String(d.class || d.label || '').toLowerCase();
+    if (label.includes('no_helmet') || label.includes('without_helmet')) {
+      visionStats.helmetViolations++;
+    } else if (label.includes('helmet')) {
+      visionStats.helmetChecks++;
+    } else if (label.includes('pothole') || label.includes('crack')) {
+      visionStats.potholesDetected++;
+    } else {
+      visionStats.trafficObjectsTracked++;
+    }
+  }
+
+  return res.json({
+    status: 'PROCESSED',
+    modelId: modelId || 'yolov8_helmet.pt',
+    timestamp: new Date().toISOString(),
+    detectionCount: detectionList.length,
+    stats: visionStats
+  });
+});
+
 app.get('/api/v1/ai/status', (req, res) => {
   return res.json({
-    engine: 'Trident Vision AI v2.4',
-    helmetModel: 'yolov8_helmet.pt (Active)',
-    potholeModel: 'yolov8_pothole.pt (Active)',
+    engine: 'SafeRide YOLOv8 Deep Vision Engine v2.6',
+    models: {
+      helmet: 'yolov8_helmet.pt (Active)',
+      pothole: 'yolov8_pothole.pt (Active)',
+      traffic: 'yolov8n.pt (Active)'
+    },
     telemetryInferenceFPS: 30,
     cameraStreamActive: true,
+    stats: visionStats,
     lastHeartbeat: new Date().toISOString(),
   });
 });
