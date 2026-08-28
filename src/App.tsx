@@ -281,6 +281,57 @@ export function App() {
     }
   };
 
+  const handleTriggerTestCrashCountdown = async () => {
+    try {
+      const res = await fetch('/api/v1/hardware/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          gForce: 5.2,
+          pitch: 28,
+          roll: 55,
+          speed: 68,
+          latitude: 28.6139,
+          longitude: 77.2090,
+          isEmergencyButtonPressed: false,
+          source: 'TEST_CRASH_TRIGGER'
+        })
+      });
+      const data = await res.json();
+      if (data.alert) {
+        setActiveConfirmationAlert(data.alert);
+      } else {
+        throw new Error('No alert in response');
+      }
+    } catch (e) {
+      setActiveConfirmationAlert({
+        id: Date.now(),
+        vehicle: vehicles[0] || {
+          id: 1,
+          vehicleNumber: 'KA-01-SR-2026',
+          owner: 'Primary Driver',
+          emergencyContactPhone: '+918757882039',
+          vehicleType: 'CAR',
+          modelName: 'Connected Telemetry Vehicle',
+          registrationDate: '2026-01-01',
+        },
+        latitude: 28.6139,
+        longitude: 77.2090,
+        locationName: 'Live GPS Coordinates [28.6139, 77.2090]',
+        gForce: 5.2,
+        impactSpeed: 68,
+        severity: 'HIGH',
+        timestamp: new Date().toISOString(),
+        dispatched: false,
+        status: 'CONFIRMATION_COUNTDOWN',
+        responseTimeMinutes: null,
+        notes: 'High G-Force impact (5.20g) recorded by MPU6050 accelerometer.',
+        confirmationCountdown: 30,
+        isConfirmedAccident: false
+      });
+    }
+  };
+
   const handleConfirmCountdownNow = async () => {
     if (!activeConfirmationAlert) return;
     try {
@@ -289,7 +340,6 @@ export function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ alertId: activeConfirmationAlert.id }),
       });
-      setActiveConfirmationAlert(null);
       fetchAlerts();
       fetchAnalytics();
       fetchSmsLogs();
@@ -326,6 +376,7 @@ export function App() {
         onOpenAuth={() => setShowAuthModal(true)}
         onLogout={handleLogout}
         onOpenSimulator={() => setShowSimulatorModal(true)}
+        onTriggerCrashCountdown={handleTriggerTestCrashCountdown}
         systemHealth={systemHealth}
       />
 
@@ -338,7 +389,7 @@ export function App() {
             emergencyContacts={contacts}
             latestAlert={alerts[0] || null}
             onNavigate={setActiveTab}
-            onSimulateCrash={() => setShowSimulatorModal(true)}
+            onSimulateCrash={handleTriggerTestCrashCountdown}
           />
         )}
 
