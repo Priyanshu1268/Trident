@@ -9,6 +9,9 @@ import { HardwareStudioView } from './components/HardwareStudioView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { SmsLogsView } from './components/SmsLogsView';
 import { VisionSafetyMonitor } from './components/VisionSafetyMonitor';
+import { VehicleFleetView } from './components/VehicleFleetView';
+import { AlertsCommandCenter } from './components/AlertsCommandCenter';
+import { EmergencyLockScreenView } from './components/EmergencyLockScreenView';
 import { CrashConfirmationModal } from './components/CrashConfirmationModal';
 import { TelemetrySimulatorModal } from './components/TelemetrySimulatorModal';
 import { AuthModal } from './components/AuthModal';
@@ -366,6 +369,66 @@ export function App() {
     localStorage.removeItem('saferide_user');
   };
 
+  const handleUpdateStatus = async (alertId: number, status: AlertStatus, notes?: string) => {
+    try {
+      await fetch(`/api/v1/alerts/${alertId}/respond`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, notes }),
+      });
+      fetchAlerts();
+      fetchAnalytics();
+    } catch (err) {
+      console.error('Failed to update alert status', err);
+    }
+  };
+
+  const handleTriggerPreset = async (scenario: string) => {
+    try {
+      await fetch('/api/v1/alerts/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenario }),
+      });
+      fetchAlerts();
+      fetchAnalytics();
+      fetchSmsLogs();
+    } catch (err) {
+      console.error('Failed to trigger scenario preset', err);
+    }
+  };
+
+  const handleRegisterVehicle = async (vehData: Partial<Vehicle>) => {
+    try {
+      const res = await fetch('/api/v1/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vehData),
+      });
+      if (res.ok) {
+        fetchVehicles();
+      }
+    } catch (err) {
+      console.error('Failed to register vehicle', err);
+    }
+  };
+
+  const handleFetchVehicleHistory = async (vehicleNumber: string): Promise<CrashAlert[]> => {
+    try {
+      const res = await fetch(`/api/v1/vehicles/${encodeURIComponent(vehicleNumber)}/alerts`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.error('Failed to fetch vehicle history', err);
+    }
+    return [];
+  };
+
+  const activeEmergencyCount = alerts.filter(
+    (a) => a.status === 'PENDING' || a.status === 'CONFIRMATION_COUNTDOWN' || a.status === 'AMBULANCE_DISPATCHED'
+  ).length;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col antialiased">
       {/* Navigation Header */}
@@ -378,6 +441,7 @@ export function App() {
         onOpenSimulator={() => setShowSimulatorModal(true)}
         onTriggerCrashCountdown={handleTriggerTestCrashCountdown}
         systemHealth={systemHealth}
+        activeEmergencyCount={activeEmergencyCount}
       />
 
       {/* Main Content Area */}
@@ -390,6 +454,29 @@ export function App() {
             latestAlert={alerts[0] || null}
             onNavigate={setActiveTab}
             onSimulateCrash={handleTriggerTestCrashCountdown}
+          />
+        )}
+
+        {activeTab === 'triage' && (
+          <AlertsCommandCenter
+            alerts={alerts}
+            onUpdateStatus={handleUpdateStatus}
+            onTriggerPreset={handleTriggerPreset}
+          />
+        )}
+
+        {activeTab === 'fleet' && (
+          <VehicleFleetView
+            vehicles={vehicles}
+            onRegisterVehicle={handleRegisterVehicle}
+            onFetchVehicleHistory={handleFetchVehicleHistory}
+          />
+        )}
+
+        {activeTab === 'ice' && (
+          <EmergencyLockScreenView
+            currentVehicleNumber={vehicles[0]?.vehicleNumber || 'KA-01-AI-2026'}
+            vehicles={vehicles}
           />
         )}
 
@@ -446,6 +533,7 @@ export function App() {
           alert={activeConfirmationAlert}
           onCancel={handleCancelCountdown}
           onConfirmNow={handleConfirmCountdownNow}
+          onViewLogs={() => setActiveTab('messages')}
         />
       )}
 

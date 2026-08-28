@@ -12,13 +12,19 @@ import {
   SlidersHorizontal,
   LogOut,
   User as UserIcon,
-  Play
+  Play,
+  Truck,
+  Flame,
+  QrCode
 } from 'lucide-react';
 import { User, SystemHealthStatus } from '../types';
 
 export type NavTabType = 
   | 'dashboard' 
   | 'telemetry' 
+  | 'triage'
+  | 'fleet'
+  | 'ice'
   | 'contacts' 
   | 'medical' 
   | 'history' 
@@ -37,6 +43,7 @@ interface NavbarProps {
   onOpenSimulator: () => void;
   onTriggerCrashCountdown?: () => void;
   systemHealth: SystemHealthStatus;
+  activeEmergencyCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,7 +54,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onOpenSimulator,
   onTriggerCrashCountdown,
-  systemHealth
+  systemHealth,
+  activeEmergencyCount = 0
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-xs">
@@ -114,110 +122,137 @@ export const Navbar: React.FC<NavbarProps> = ({
           <nav className="hidden lg:flex items-center gap-1">
             <button
               onClick={() => onSelectTab('dashboard')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'dashboard'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <Activity className="w-4 h-4 text-emerald-600" />
+              <Activity className="w-3.5 h-3.5 text-emerald-600" />
               Dashboard
             </button>
 
             <button
+              onClick={() => onSelectTab('triage')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors relative ${
+                activeTab === 'triage'
+                  ? 'bg-slate-100 text-slate-900 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-rose-500" />
+              Triage Command
+              {typeof activeEmergencyCount === 'number' && activeEmergencyCount > 0 && (
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping absolute top-1 right-1" />
+              )}
+            </button>
+
+            <button
+              onClick={() => onSelectTab('fleet')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === 'fleet'
+                  ? 'bg-slate-100 text-slate-900 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5 text-indigo-600" />
+              Fleet
+            </button>
+
+            <button
+              onClick={() => onSelectTab('ice')}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                activeTab === 'ice'
+                  ? 'bg-slate-100 text-slate-900 font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              <QrCode className="w-3.5 h-3.5 text-amber-600" />
+              ICE Lock Screen
+            </button>
+
+            <button
               onClick={() => onSelectTab('telemetry')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'telemetry'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <Activity className="w-4 h-4 text-slate-600" />
+              <Activity className="w-3.5 h-3.5 text-slate-600" />
               Live Telemetry
             </button>
 
             <button
               onClick={() => onSelectTab('contacts')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'contacts'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <Users className="w-4 h-4 text-slate-600" />
-              Emergency Contacts
+              <Users className="w-3.5 h-3.5 text-slate-600" />
+              Contacts
             </button>
 
             <button
               onClick={() => onSelectTab('medical')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'medical'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <HeartPulse className="w-4 h-4 text-rose-600" />
-              Medical Profile
-            </button>
-
-            <button
-              onClick={() => onSelectTab('history')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === 'history'
-                  ? 'bg-slate-100 text-slate-900 font-semibold'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <History className="w-4 h-4 text-slate-600" />
-              Accident History
+              <HeartPulse className="w-3.5 h-3.5 text-rose-600" />
+              Medical
             </button>
 
             <button
               onClick={() => onSelectTab('hardware')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'hardware'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <Cpu className="w-4 h-4 text-slate-600" />
-              Hardware Studio
+              <Cpu className="w-3.5 h-3.5 text-slate-600" />
+              Hardware
             </button>
 
             <button
               onClick={() => onSelectTab('analytics')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'analytics'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <BarChart3 className="w-4 h-4 text-slate-600" />
+              <BarChart3 className="w-3.5 h-3.5 text-slate-600" />
               Analytics
             </button>
 
             <button
               onClick={() => onSelectTab('messages')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'messages'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <MessageSquareText className="w-4 h-4 text-slate-600" />
-              SMS Logs
+              <MessageSquareText className="w-3.5 h-3.5 text-slate-600" />
+              SMS
             </button>
 
             <button
               onClick={() => onSelectTab('vision')}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'vision'
                   ? 'bg-slate-100 text-slate-900 font-semibold'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
-              <Camera className="w-4 h-4 text-slate-600" />
-              AI Vision
+              <Camera className="w-3.5 h-3.5 text-slate-600" />
+              Vision AI
             </button>
           </nav>
 
@@ -253,13 +288,16 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="lg:hidden flex items-center gap-2 overflow-x-auto py-2 border-t border-slate-100 text-xs">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: Activity },
+            { id: 'triage', label: 'Triage Command', icon: Flame },
+            { id: 'fleet', label: 'Fleet', icon: Truck },
+            { id: 'ice', label: 'ICE Lock', icon: QrCode },
             { id: 'telemetry', label: 'Telemetry', icon: Activity },
             { id: 'contacts', label: 'Contacts', icon: Users },
             { id: 'medical', label: 'Medical', icon: HeartPulse },
             { id: 'history', label: 'History', icon: History },
             { id: 'hardware', label: 'Hardware', icon: Cpu },
             { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-            { id: 'messages', label: 'SMS Logs', icon: MessageSquareText },
+            { id: 'messages', label: 'SMS', icon: MessageSquareText },
             { id: 'vision', label: 'Vision', icon: Camera }
           ].map((item) => {
             const Icon = item.icon;

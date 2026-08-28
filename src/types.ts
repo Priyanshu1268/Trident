@@ -128,6 +128,8 @@ export interface TelemetryRequest {
   impactDetected?: boolean;
   severity?: SeverityLevel;
   visionEvent?: string;
+  notes?: string;
+  locationName?: string;
   accelX?: number;
   accelY?: number;
   accelZ?: number;
