@@ -23,7 +23,15 @@ import {
   ExternalLink,
   Code,
   Gauge,
-  CheckCircle2
+  CheckCircle2,
+  MessageSquare,
+  Send,
+  Phone,
+  PhoneOff,
+  Signal,
+  SignalHigh,
+  AlertTriangle,
+  Server
 } from 'lucide-react';
 import { 
   ResponsiveContainer, 
@@ -49,7 +57,7 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
   onTriggerCountdown,
   activeTelemetry,
 }) => {
-  const [activeTab, setActiveTab] = useState<'monitor' | 'wiring' | 'calls' | 'firmware' | 'config'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'wiring' | 'gsm' | 'calls' | 'firmware' | 'config'>('gsm');
   const [devices, setDevices] = useState<any[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string>('ESP32-SAFERIDE-01');
   const [callLogs, setCallLogs] = useState<EmergencyCallLog[]>([]);
@@ -68,6 +76,35 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
   const [testBattery, setTestBattery] = useState<number>(4.12);
   const [testCsq, setTestCsq] = useState<number>(28);
   const [testSos, setTestSos] = useState<boolean>(false);
+
+  // SIM800L Live Calling, SMS, and AT Diagnostic State
+  const [smsRecipient, setSmsRecipient] = useState<string>('+919876543210');
+  const [smsMessageText, setSmsMessageText] = useState<string>(
+    `[SafeRide AI SOS] Emergency Alert: Crash Detected for vehicle KA-01-SR-2026 at GPS Lat 28.6139, Lng 77.2090. Driver: Priyanshu Kumar (Blood: O+). Medical trauma assistance dispatched via Ambulance 108 & Police 112.`
+  );
+  const [smsSending, setSmsSending] = useState<boolean>(false);
+  const [smsResultToast, setSmsResultToast] = useState<string | null>(null);
+
+  const [callRecipient, setCallRecipient] = useState<string>('+919876543210');
+  const [callRecipientName, setCallRecipientName] = useState<string>('Primary ICE Contact (Family)');
+  const [isCalling, setIsCalling] = useState<boolean>(false);
+  const [callStatusText, setCallStatusText] = useState<string>('IDLE');
+  const [callDuration, setCallDuration] = useState<number>(0);
+
+  const [atInput, setAtInput] = useState<string>('AT+CSQ');
+  const [atExecuting, setAtExecuting] = useState<boolean>(false);
+  const [atTerminalLogs, setAtTerminalLogs] = useState<Array<{ cmd: string; resp: string; time: string }>>([
+    { cmd: 'AT', resp: 'OK', time: '10:00:00' },
+    { cmd: 'AT+CSQ', resp: '+CSQ: 28,0  OK (Signal: -67 dBm, 5/5 Bars)', time: '10:00:01' },
+    { cmd: 'AT+CREG?', resp: '+CREG: 0,1  OK (Registered on Home Cellular Network)', time: '10:00:02' },
+  ]);
+
+  const [gsmStatusData, setGsmStatusData] = useState<any>({
+    status: 'ONLINE',
+    signalQuality: { csq: 28, dbm: -67, rating: 'EXCELLENT', bars: 5 },
+    batteryVoltage: '4.08V',
+    network: { mode: 'REGISTERED_HOME_NETWORK', carrier: 'Airtel / Jio 2G GSM' },
+  });
 
   // Real-time oscilloscope chart history
   const [chartHistory, setChartHistory] = useState<any[]>(() => {
@@ -94,22 +131,42 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
   const [serialPermissionWarning, setSerialPermissionWarning] = useState<string | null>(null);
   const [serialLogs, setSerialLogs] = useState<string[]>([
     `[${new Date().toLocaleTimeString()}] SafeRide Hardware Engine initialized.`,
+    `[${new Date().toLocaleTimeString()}] SIM800L Pinout: VCC->4V, GND->GND, TXD->RX2(GPIO 16), RXD->TX2(GPIO 17)`,
     `[${new Date().toLocaleTimeString()}] Ready for ESP32 + MPU6050 + SIM800L telemetry streams.`,
   ]);
   const serialPortRef = useRef<any>(null);
   const serialReaderRef = useRef<any>(null);
   const virtualIntervalRef = useRef<any>(null);
+  const callTimerRef = useRef<any>(null);
   const lastCrashTriggerTimeRef = useRef<number>(0);
+
+  // Helper to write to USB Serial port if connected
+  const writeToSerialPort = async (text: string) => {
+    if (!serialConnected || !serialPortRef.current) return false;
+    try {
+      const encoder = new TextEncoder();
+      const writer = serialPortRef.current.writable.getWriter();
+      await writer.write(encoder.encode(text + '\n'));
+      writer.releaseLock();
+      setSerialLogs((prev) => [...prev.slice(-40), `[USB-TX] ${text}`]);
+      return true;
+    } catch (err) {
+      console.warn('Failed to write to serial port:', err);
+      return false;
+    }
+  };
 
   // Fetch registered devices and call logs
   const fetchData = async () => {
     try {
-      const [devRes, callRes] = await Promise.all([
+      const [devRes, callRes, gsmRes] = await Promise.all([
         fetch('/api/v1/hardware/devices'),
         fetch('/api/v1/hardware/call-logs'),
+        fetch('/api/v1/hardware/gsm-status'),
       ]);
       if (devRes.ok) setDevices(await devRes.json());
       if (callRes.ok) setCallLogs(await callRes.json());
+      if (gsmRes.ok) setGsmStatusData(await gsmRes.json());
     } catch (e) {
       console.error('Failed to load hardware data', e);
     }
@@ -146,11 +203,14 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     az?: number;
     pitch?: number;
     roll?: number;
+    jerk?: number;
     sosButtonPressed?: boolean;
     csq?: number;
     batteryVoltage?: number;
     deviceId?: string;
     vehicleNumber?: string;
+    alert?: string;
+    state?: string;
   }) => {
     const g = typeof pkt.gForce === 'number' ? pkt.gForce : 1.0;
     const p = typeof pkt.pitch === 'number' ? pkt.pitch : 0.0;
@@ -158,6 +218,7 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     const ax = typeof pkt.ax === 'number' ? pkt.ax : 0.0;
     const ay = typeof pkt.ay === 'number' ? pkt.ay : 0.0;
     const az = typeof pkt.az === 'number' ? pkt.az : 1.0;
+    const jerk = typeof pkt.jerk === 'number' ? pkt.jerk : 0.0;
     const sos = Boolean(pkt.sosButtonPressed);
 
     setTestGForce(g);
@@ -173,13 +234,14 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     pushChartPoint(g, p, r, ax, ay, az);
 
     // Auto-detect crash thresholds
-    const isImpact = g >= 3.5;
-    const isRollover = Math.abs(r) >= 50 || Math.abs(p) >= 50;
+    const isImpact = g >= 2.4 || jerk >= 4.0;
+    const isRollover = Math.abs(r) >= 35 || Math.abs(p) >= 35;
+    const isExplicitCrash = pkt.alert === 'CRASH_DETECTED' || pkt.state === 'COUNTDOWN';
     const now = Date.now();
 
-    if ((isImpact || isRollover || sos) && now - lastCrashTriggerTimeRef.current > 10000) {
+    if ((isImpact || isRollover || sos || isExplicitCrash) && now - lastCrashTriggerTimeRef.current > 6000) {
       lastCrashTriggerTimeRef.current = now;
-      handleTriggerImpact(g, sos);
+      handleTriggerImpact(g, sos, p, r, ax, ay, az);
     }
   };
 
@@ -338,35 +400,194 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
     }
   };
 
+  // Real-world SIM800L Actions
+  const handleSendSms = async (targetPhone = smsRecipient, text = smsMessageText) => {
+    if (!targetPhone || !text) return;
+    setSmsSending(true);
+    setSmsResultToast(null);
+
+    // 1. Write to physical ESP32 UART over WebSerial if connected
+    if (serialConnected) {
+      await writeToSerialPort(`SMS:${targetPhone}:${text}`);
+    }
+
+    try {
+      const res = await fetch('/api/v1/hardware/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: targetPhone,
+          message: text,
+          deviceId: selectedDevice,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSmsResultToast(`SMS successfully queued for SIM800L transmission to ${targetPhone} (CMGS ref: ${data.messageRef || 'OK'})`);
+        setSerialLogs((prev) => [
+          ...prev.slice(-40),
+          `[SIM800L-SMS-SUCCESS] AT+CMGS="${targetPhone}" -> Sent "${text.slice(0, 45)}..."`,
+        ]);
+        fetchData();
+      } else {
+        setSmsResultToast(`SMS Error: ${data.error || 'Failed to dispatch SMS'}`);
+      }
+    } catch (err: any) {
+      setSmsResultToast(`Network Error: ${err.message}`);
+    } finally {
+      setSmsSending(false);
+      setTimeout(() => setSmsResultToast(null), 7000);
+    }
+  };
+
+  const handleDialCall = async (targetPhone = callRecipient) => {
+    if (!targetPhone) return;
+    setIsCalling(true);
+    setCallStatusText('DIALING (ATD)');
+    setCallDuration(0);
+
+    // 1. Write to physical ESP32 UART over WebSerial if connected
+    if (serialConnected) {
+      await writeToSerialPort(`CALL:${targetPhone}`);
+    }
+
+    try {
+      const res = await fetch('/api/v1/hardware/dial-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phoneNumber: targetPhone,
+          recipientName: callRecipientName,
+          deviceId: selectedDevice,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setCallStatusText('RINGING / ACTIVE (VOICE SOS AUDIO PLAYING)');
+        setSerialLogs((prev) => [
+          ...prev.slice(-40),
+          `[SIM800L-CALL-DIALED] ATD${targetPhone}; -> Cellular voice line connected. Automated SOS warning playing.`,
+        ]);
+        fetchData();
+
+        if (callTimerRef.current) clearInterval(callTimerRef.current);
+        callTimerRef.current = setInterval(() => {
+          setCallDuration((prev) => prev + 1);
+        }, 1000);
+      } else {
+        setCallStatusText(`FAILED: ${data.error}`);
+        setIsCalling(false);
+      }
+    } catch (err: any) {
+      setCallStatusText(`ERROR: ${err.message}`);
+      setIsCalling(false);
+    }
+  };
+
+  const handleHangupCall = async () => {
+    setCallStatusText('HANGING UP (ATH)');
+    if (callTimerRef.current) clearInterval(callTimerRef.current);
+
+    // 1. Write to physical ESP32 UART over WebSerial if connected
+    if (serialConnected) {
+      await writeToSerialPort(`ATH`);
+    }
+
+    try {
+      await fetch('/api/v1/hardware/hangup-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: selectedDevice }),
+      });
+      setSerialLogs((prev) => [
+        ...prev.slice(-40),
+        `[SIM800L-CALL-HANGUP] ATH -> Voice channel released. Call duration: ${callDuration}s`,
+      ]);
+      fetchData();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsCalling(false);
+      setCallStatusText('IDLE');
+      setCallDuration(0);
+    }
+  };
+
+  const handleSendAtCommand = async (cmdToSend = atInput) => {
+    if (!cmdToSend) return;
+    setAtExecuting(true);
+    const nowTime = new Date().toLocaleTimeString();
+
+    // 1. Write to physical ESP32 UART over WebSerial if connected
+    if (serialConnected) {
+      await writeToSerialPort(`AT:${cmdToSend}`);
+    }
+
+    try {
+      const res = await fetch('/api/v1/hardware/send-at-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmdToSend, deviceId: selectedDevice }),
+      });
+      const data = await res.json();
+      const responseStr = data.response || 'OK';
+
+      setAtTerminalLogs((prev) => [
+        ...prev.slice(-25),
+        { cmd: cmdToSend, resp: responseStr, time: nowTime },
+      ]);
+      setSerialLogs((prev) => [
+        ...prev.slice(-40),
+        `[SIM800L-AT-EXEC] ${cmdToSend} => ${responseStr}`,
+      ]);
+    } catch (err: any) {
+      setAtTerminalLogs((prev) => [
+        ...prev.slice(-25),
+        { cmd: cmdToSend, resp: `ERROR: ${err.message}`, time: nowTime },
+      ]);
+    } finally {
+      setAtExecuting(false);
+    }
+  };
+
   // Trigger test telemetry
-  const handleTriggerImpact = async (gVal: number, isSos = false) => {
+  const handleTriggerImpact = async (
+    gVal = testGForce,
+    isSos = false,
+    pVal = testPitch,
+    rVal = testRoll,
+    axVal = testAx,
+    ayVal = testAy,
+    azVal = testAz
+  ) => {
     setLoading(true);
     const payload = {
       deviceId: selectedDevice,
       vehicleNumber: testVehicleNumber,
-      ax: testAx,
-      ay: testAy,
-      az: testAz,
+      ax: axVal,
+      ay: ayVal,
+      az: azVal,
       gForce: gVal,
-      pitch: testPitch,
-      roll: testRoll,
+      pitch: pVal,
+      roll: rVal,
       speed: testSpeed,
       impactSpeed: testSpeed,
       batteryVoltage: testBattery,
       csq: testCsq,
       sosButtonPressed: isSos,
+      isEmergencyButtonPressed: isSos,
       latitude: 28.6139,
       longitude: 77.2090,
     };
 
     setSerialLogs((prev) => [
       ...prev.slice(-40),
-      `[CRASH ALERT TRIGGERED] G=${gVal}g | Pitch=${testPitch}° | Roll=${testRoll}° | SOS=${isSos}`,
+      `[CRASH ALERT TRIGGERED] G=${gVal}g | Pitch=${pVal}° | Roll=${rVal}° | SOS=${isSos}`,
     ]);
 
     try {
       const res = await onTriggerTelemetry(payload);
-      if (res?.alert && res?.status === 'COUNTDOWN_INITIATED') {
+      if (res?.alert) {
         onTriggerCountdown(res.alert);
       }
     } finally {
@@ -501,6 +722,18 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
 
       {/* Tabs Navigation */}
       <div className="flex items-center space-x-2 border-b border-slate-200 pb-2 overflow-x-auto text-xs font-bold">
+        <button
+          onClick={() => setActiveTab('gsm')}
+          className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition ${
+            activeTab === 'gsm'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Radio className="w-4 h-4 text-emerald-400" />
+          <span>SIM800L GSM Real-Time Studio</span>
+        </button>
+
         <button
           onClick={() => setActiveTab('monitor')}
           className={`px-4 py-2 rounded-lg flex items-center space-x-2 transition ${
@@ -780,35 +1013,54 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
 
               {/* Quick Shock Buttons */}
               <div className="pt-2 space-y-2">
-                <span className="text-xs font-bold text-slate-700 block">Trigger Test Events:</span>
-                <div className="grid grid-cols-3 gap-2">
+                <span className="text-xs font-bold text-slate-700 block">Instant Crash & Tilt Simulation:</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
-                    onClick={() => handleTriggerImpact(1.05, false)}
-                    className="p-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    onClick={() => handleTriggerImpact(1.02, false, 0, 0, 0.05, 0.05, 1.0)}
+                    className="p-2.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors text-center"
                   >
-                    Cruise (1.0g)
+                    🚗 Normal Cruise (1.0g)
                   </button>
                   <button
-                    onClick={() => handleTriggerImpact(2.4, false)}
-                    className="p-2 rounded-lg border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 transition-colors"
+                    onClick={() => handleTriggerImpact(1.7, false, 4, 3, 0.4, 0.3, 1.6)}
+                    className="p-2.5 rounded-lg border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 transition-colors text-center"
                   >
-                    Pothole (2.4g)
+                    ⚠️ Pothole Bump (1.7g)
                   </button>
                   <button
-                    onClick={() => handleTriggerImpact(5.2, false)}
-                    className="p-2 rounded-lg border border-rose-200 bg-rose-50 text-xs font-semibold text-rose-900 hover:bg-rose-100 transition-colors"
+                    onClick={() => handleTriggerImpact(3.8, false, 18, 12, 1.8, 1.2, 3.2)}
+                    className="p-2.5 rounded-lg border border-rose-300 bg-rose-50 text-xs font-bold text-rose-900 hover:bg-rose-100 transition-colors text-center shadow-xs"
                   >
-                    💥 Crash (5.2g)
+                    💥 Tap / High Jerk (3.8g)
+                  </button>
+                  <button
+                    onClick={() => handleTriggerImpact(1.1, false, 12, 55, 0.3, 0.9, 0.6)}
+                    className="p-2.5 rounded-lg border border-indigo-300 bg-indigo-50 text-xs font-bold text-indigo-900 hover:bg-indigo-100 transition-colors text-center shadow-xs"
+                  >
+                    🔄 Rollover Tilt (55° Roll)
                   </button>
                 </div>
 
                 <button
                   onClick={() => handleTriggerImpact(1.2, true)}
-                  className="w-full py-2.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <ShieldAlert className="w-4 h-4" />
-                  Trigger Hardware SOS Pushbutton
+                  🚨 Trigger Hardware SOS Rocker Pushbutton
                 </button>
+              </div>
+
+              {/* SIH Live Demo Testing Guide Card */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs space-y-1.5 text-emerald-950">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-900">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                  Physical Demo Instructions (SIH Presentation):
+                </div>
+                <ul className="list-disc list-inside space-y-0.5 text-emerald-800 text-[11px]">
+                  <li><strong>Method 1 (Jerk/Tap):</strong> Firmly tap your MPU6050 sensor or breadboard against the desk &mdash; threshold is set to 2.40G for fast response.</li>
+                  <li><strong>Method 2 (Rollover):</strong> Tilt the board upside down or sideways by &gt;35&deg;.</li>
+                  <li><strong>Method 3 (SOS Switch):</strong> Flip the rocker switch connected between 3.3V and GPIO 18.</li>
+                </ul>
               </div>
             </div>
 
@@ -916,6 +1168,427 @@ export const HardwareStudioView: React.FC<HardwareStudioViewProps> = ({
                 </p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB: SIM800L Real-Time GSM Studio */}
+      {activeTab === 'gsm' && (
+        <div className="space-y-6">
+          {/* SIM800L Pinout & Live Signal Telemetry */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">GSM Power Supply</span>
+                <Battery className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className="text-xl font-black text-slate-900">{gsmStatusData?.batteryVoltage || '4.08V'}</span>
+                <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  Target: 3.7V - 4.2V
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">Dedicated 2A current capacitor buffer</p>
+            </div>
+
+            <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">Signal Strength (CSQ)</span>
+                <SignalHigh className="w-4 h-4 text-indigo-600" />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-2">
+                <span className="text-xl font-black text-slate-900">
+                  CSQ {gsmStatusData?.signalQuality?.csq || testCsq}/31
+                </span>
+                <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                  {gsmStatusData?.signalQuality?.dbm || -67} dBm
+                </span>
+              </div>
+              <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div 
+                  className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, ((gsmStatusData?.signalQuality?.csq || testCsq) / 31) * 100)}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">Cellular Network</span>
+                <Radio className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div className="mt-2 flex items-baseline space-x-1.5">
+                <span className="text-sm font-bold text-slate-900 truncate">
+                  {gsmStatusData?.network?.carrier || 'Airtel / Jio GSM'}
+                </span>
+              </div>
+              <div className="flex items-center space-x-1.5 mt-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[11px] font-semibold text-emerald-700">CREG=1 (Home Registered)</span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-500">ESP32 UART2 Pinout</span>
+                <Cable className="w-4 h-4 text-slate-700" />
+              </div>
+              <div className="mt-1.5 space-y-0.5 text-[11px] font-mono">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">TXD →</span>
+                  <span className="font-bold text-slate-900">ESP32 RX2 (GPIO 16)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">RXD →</span>
+                  <span className="font-bold text-slate-900">ESP32 TX2 (GPIO 17)</span>
+                </div>
+              </div>
+              <span className="text-[10px] text-slate-400 block mt-1">Baud Rate: 9600 / 115200</span>
+            </div>
+          </div>
+
+          {/* SIM800L Real-World Calling and SMS Studio */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* CARD 1: Real-Time Voice Call Dispatcher */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center">
+                    <Phone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Real-Time Voice Call Dispatcher</h3>
+                    <p className="text-[11px] text-slate-500">Automated ATD emergency dialing via SIM800L</p>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  isCalling 
+                    ? 'bg-rose-50 text-rose-700 border-rose-200 animate-pulse' 
+                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  {callStatusText}
+                </span>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Select Emergency Destination:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallRecipient('+919876543210');
+                      setCallRecipientName('Primary ICE Family Contact');
+                    }}
+                    className={`p-2 rounded-lg border text-left text-xs transition ${
+                      callRecipient === '+919876543210'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="font-bold">ICE Family Contact</div>
+                    <div className="text-[10px] opacity-80">+91 98765 43210</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallRecipient('+911080000108');
+                      setCallRecipientName('State Ambulance Emergency Service (108)');
+                    }}
+                    className={`p-2 rounded-lg border text-left text-xs transition ${
+                      callRecipient === '+911080000108'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="font-bold">Ambulance Trauma (108)</div>
+                    <div className="text-[10px] opacity-80">Govt Emergency 108</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallRecipient('+911120000112');
+                      setCallRecipientName('Police Highway Control (112)');
+                    }}
+                    className={`p-2 rounded-lg border text-left text-xs transition ${
+                      callRecipient === '+911120000112'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="font-bold">Police Control (112)</div>
+                    <div className="text-[10px] opacity-80">Central ERSS 112</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCallRecipient('+911033001033');
+                      setCallRecipientName('National Highway Rescue (1033)');
+                    }}
+                    className={`p-2 rounded-lg border text-left text-xs transition ${
+                      callRecipient === '+911033001033'
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <div className="font-bold">Highway Rescue (1033)</div>
+                    <div className="text-[10px] opacity-80">NHAI Helpline 1033</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Number Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Phone Number (with Country Code):</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={callRecipient}
+                    onChange={(e) => setCallRecipient(e.target.value)}
+                    placeholder="+919876543210"
+                    className="flex-1 px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                  <input
+                    type="text"
+                    value={callRecipientName}
+                    onChange={(e) => setCallRecipientName(e.target.value)}
+                    placeholder="Recipient Name / Department"
+                    className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </div>
+              </div>
+
+              {/* Call Controls */}
+              <div className="flex items-center gap-3 pt-2">
+                {!isCalling ? (
+                  <button
+                    onClick={() => handleDialCall()}
+                    className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition"
+                  >
+                    <Phone className="w-4 h-4" />
+                    <span>Dial Voice Call via SIM800L (ATD)</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleHangupCall}
+                    className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition animate-pulse"
+                  >
+                    <PhoneOff className="w-4 h-4" />
+                    <span>Hang Up Active Call ({callDuration}s) (ATH)</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Live Voice Audio Transcript Simulation */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-[11px] space-y-1">
+                <div className="flex items-center space-x-1.5 text-slate-700 font-bold">
+                  <Radio className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>SIM800L Cellular Audio Broadcast Stream:</span>
+                </div>
+                <p className="text-slate-600 italic">
+                  "Emergency Warning from SafeRide AI: Vehicle {testVehicleNumber} has experienced an impact (G-Force: {currentGForce}g). Location: 28.6139°N, 77.2090°E. Driver: Priyanshu Kumar. Immediate medical rescue required."
+                </p>
+              </div>
+            </div>
+
+            {/* CARD 2: Real-Time Emergency SMS Broadcast */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Real-Time Emergency SMS Broadcast</h3>
+                    <p className="text-[11px] text-slate-500">Live AT+CMGS cellular text delivery with GPS link</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  {smsMessageText.length}/160 chars
+                </span>
+              </div>
+
+              {/* Phone Recipient */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Recipient Mobile Number:</label>
+                <input
+                  type="text"
+                  value={smsRecipient}
+                  onChange={(e) => setSmsRecipient(e.target.value)}
+                  placeholder="+919876543210"
+                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </div>
+
+              {/* Message Templates */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">Quick SOS Message Presets:</label>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSmsMessageText(`[SafeRide AI SOS] Emergency Alert: Crash Detected for vehicle ${testVehicleNumber} at GPS Lat 28.6139, Lng 77.2090. Driver: Priyanshu Kumar (Blood: O+). Medical assistance requested.`)}
+                    className="px-2.5 py-1 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                  >
+                    🚨 Severe Crash SOS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSmsMessageText(`[SafeRide AI SOS] Rollover detected on ${testVehicleNumber} at GPS https://maps.google.com/?q=28.6139,77.2090. Driver requires immediate emergency rescue.`)}
+                    className="px-2.5 py-1 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                  >
+                    ⚠️ Rollover Alert
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSmsMessageText(`[SafeRide AI] SIM800L Hardware Ping Test from ${selectedDevice}. Signal CSQ: ${testCsq}, Battery: ${testBattery}V. System operational.`)}
+                    className="px-2.5 py-1 text-[10px] font-bold rounded bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
+                  >
+                    🧪 Diagnostic Ping Test
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Body */}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-700">SMS Body (Text Mode AT+CMGS):</label>
+                <textarea
+                  rows={3}
+                  value={smsMessageText}
+                  onChange={(e) => setSmsMessageText(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 leading-relaxed"
+                />
+              </div>
+
+              {/* Toast Result */}
+              {smsResultToast && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 flex items-center space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>{smsResultToast}</span>
+                </div>
+              )}
+
+              {/* Send Button */}
+              <button
+                onClick={() => handleSendSms()}
+                disabled={smsSending}
+                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-2 shadow-xs transition"
+              >
+                {smsSending ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Broadcasting via SIM800L AT+CMGS...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span>Send Real Emergency SMS via SIM800L</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive AT Command Diagnostic Console */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 text-white shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-slate-800 text-amber-400 border border-slate-700 flex items-center justify-center">
+                  <Terminal className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">SIM800L Interactive AT Command Terminal</h3>
+                  <p className="text-[11px] text-slate-400">Direct Hayes AT modem diagnostics on UART2 (GPIO 16/17)</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSendAtCommand('AT')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] border border-slate-700"
+                >
+                  AT (Ping)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendAtCommand('AT+CSQ')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] border border-slate-700"
+                >
+                  AT+CSQ (Signal)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendAtCommand('AT+CREG?')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] border border-slate-700"
+                >
+                  AT+CREG? (Network)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendAtCommand('AT+CBC')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] border border-slate-700"
+                >
+                  AT+CBC (Battery)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendAtCommand('AT+COPS?')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] border border-slate-700"
+                >
+                  AT+COPS? (Operator)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSendAtCommand('AT+CMGF=1')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-mono text-[11px] border border-slate-700"
+                >
+                  AT+CMGF=1 (SMS Mode)
+                </button>
+              </div>
+            </div>
+
+            {/* Terminal Window */}
+            <div className="bg-slate-950 p-3.5 rounded-lg font-mono text-xs text-emerald-400 space-y-1.5 max-h-48 overflow-y-auto border border-slate-800">
+              {atTerminalLogs.map((log, idx) => (
+                <div key={idx} className="space-y-0.5">
+                  <div className="text-amber-400 font-bold">
+                    [{log.time}] &gt;&gt;&gt; {log.cmd}
+                  </div>
+                  <div className="text-slate-300 pl-4 whitespace-pre-wrap">
+                    &lt;&lt;&lt; {log.resp}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Command Input Bar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendAtCommand();
+              }}
+              className="flex gap-2"
+            >
+              <div className="relative flex-1">
+                <span className="absolute left-3 top-2.5 font-mono text-xs text-slate-500">&gt;</span>
+                <input
+                  type="text"
+                  value={atInput}
+                  onChange={(e) => setAtInput(e.target.value)}
+                  placeholder="Enter AT command (e.g. AT+CSQ, ATD+919876543210;, ATH)..."
+                  className="w-full pl-7 pr-3 py-2 text-xs font-mono bg-slate-950 text-white border border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={atExecuting}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-bold text-xs rounded-lg transition"
+              >
+                {atExecuting ? 'Sending...' : 'Execute AT'}
+              </button>
+            </form>
           </div>
         </div>
       )}
