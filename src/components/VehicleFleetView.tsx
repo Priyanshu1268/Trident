@@ -12,7 +12,9 @@ import {
   User, 
   Check, 
   AlertTriangle,
-  X
+  X,
+  QrCode,
+  HeartPulse
 } from 'lucide-react';
 import { Vehicle, CrashAlert, VehicleType } from '../types';
 
@@ -204,14 +206,23 @@ export const VehicleFleetView: React.FC<VehicleFleetViewProps> = ({
                     </div>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <button
-                      id={`btn-view-history-${v.vehicleNumber}`}
-                      onClick={() => handleOpenHistory(v.vehicleNumber)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium border border-slate-700 inline-flex items-center gap-1 transition"
-                    >
-                      <History className="w-3 h-3" />
-                      <span>Crash History</span>
-                    </button>
+                    <div className="inline-flex items-center space-x-1.5">
+                      <a
+                        href={`/?view=passport&vehicle=${encodeURIComponent(v.vehicleNumber)}#passport`}
+                        className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold border border-rose-500 inline-flex items-center gap-1 transition shadow-xs"
+                      >
+                        <QrCode className="w-3 h-3" />
+                        <span>Medical QR</span>
+                      </a>
+                      <button
+                        id={`btn-view-history-${v.vehicleNumber}`}
+                        onClick={() => handleOpenHistory(v.vehicleNumber)}
+                        className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-medium border border-slate-700 inline-flex items-center gap-1 transition"
+                      >
+                        <History className="w-3 h-3" />
+                        <span>Crash History</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

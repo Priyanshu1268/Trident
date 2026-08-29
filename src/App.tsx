@@ -3,7 +3,7 @@ import { Navbar, NavTabType } from './components/Navbar';
 import { DashboardOverview } from './components/DashboardOverview';
 import { SensorLiveView } from './components/SensorLiveView';
 import { ContactsManagerView } from './components/ContactsManagerView';
-import { MedicalProfileView } from './components/MedicalProfileView';
+import { MedicalPassportView } from './components/MedicalPassportView';
 import { AccidentHistoryView } from './components/AccidentHistoryView';
 import { HardwareStudioView } from './components/HardwareStudioView';
 import { AnalyticsView } from './components/AnalyticsView';
@@ -170,6 +170,12 @@ export function App() {
         localStorage.removeItem('saferide_token');
         localStorage.removeItem('saferide_user');
       }
+    }
+
+    // Check URL parameters for direct QR Code responder scanner / passport deep linking
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('view') === 'passport' || window.location.hash.includes('passport')) {
+      setActiveTab('medical');
     }
   }, [fetchAlerts, fetchVehicles, fetchAnalytics, fetchSmsLogs]);
 
@@ -474,9 +480,10 @@ export function App() {
         )}
 
         {activeTab === 'ice' && (
-          <EmergencyLockScreenView
+          <MedicalPassportView
             currentVehicleNumber={vehicles[0]?.vehicleNumber || 'KA-01-AI-2026'}
             vehicles={vehicles}
+            onNavigateToTab={(tab) => setActiveTab(tab as NavTabType)}
           />
         )}
 
@@ -494,11 +501,10 @@ export function App() {
         )}
 
         {activeTab === 'medical' && (
-          <MedicalProfileView
-            initialProfile={medicalProfile}
-            userName={user?.name || 'John Doe'}
-            userPhone={user?.phone || '+91 98765 43210'}
-            onSaveProfile={handleSaveMedicalProfile}
+          <MedicalPassportView
+            currentVehicleNumber={vehicles[0]?.vehicleNumber || 'KA-01-AI-2026'}
+            vehicles={vehicles}
+            onNavigateToTab={(tab) => setActiveTab(tab as NavTabType)}
           />
         )}
 

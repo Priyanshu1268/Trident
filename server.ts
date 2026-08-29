@@ -1291,70 +1291,180 @@ app.post('/api/v1/hardware/timer-expire', (req, res) => {
 });
 
 // ----------------------------------------------------
-// GOOD SAMARITAN / EMERGENCY LOCK SCREEN MEDICAL PASSPORT
+// GOOD SAMARITAN / EMERGENCY MEDICAL PASSPORT (QR RESCUE)
 // ----------------------------------------------------
-app.get('/api/v1/ice-passport/:vehicleNumber', (req, res) => {
-  const { vehicleNumber } = req.params;
-  const vehicle = vehicles.find((v) => v.vehicleNumber.toLowerCase() === vehicleNumber.toLowerCase());
-
-  if (!vehicle) {
-    return res.status(404).json({ error: `Vehicle ${vehicleNumber} not found.` });
-  }
-
+const getMedicalPassportPayload = (vehicleNumber: string) => {
+  const vehicle = vehicles.find((v) => v.vehicleNumber.toLowerCase() === vehicleNumber.toLowerCase()) || vehicles[0];
   const driver = vehicle.driver || users[0];
-  const lastAlert = alerts.find((a) => a.vehicle.vehicleNumber.toLowerCase() === vehicleNumber.toLowerCase());
+  const lastAlert = alerts.find((a) => a.vehicle.vehicleNumber.toLowerCase() === vehicle.vehicleNumber.toLowerCase());
 
-  return res.json({
+  return {
     vehicleNumber: vehicle.vehicleNumber,
-    modelName: vehicle.modelName,
-    vehicleType: vehicle.vehicleType,
+    modelName: vehicle.modelName || 'Smart Connected Vehicle',
+    vehicleType: vehicle.vehicleType || 'CAR',
+    qrPayloadUrl: `/passport/${encodeURIComponent(vehicle.vehicleNumber)}`,
+    fhirRecordId: `FHIR-ICE-${vehicle.vehicleNumber.replace(/[^a-zA-Z0-9]/g, '')}`,
     driver: {
-      name: driver.name || vehicle.owner,
-      phone: driver.phone || vehicle.emergencyContactPhone,
+      name: driver.name || vehicle.owner || 'Driver',
+      phone: driver.phone || vehicle.emergencyContactPhone || '+919876543210',
       bloodGroup: driver.bloodGroup || 'O+',
-      medicalConditions: driver.medicalConditions || 'None Recorded',
-      allergies: driver.allergies || 'None Recorded',
-      medications: driver.medications || 'None Recorded',
+      allergies: driver.allergies || 'Penicillin, Aspirin',
+      chronicConditions: driver.medicalConditions || driver.chronicConditions || 'Mild Asthma, Type 2 Diabetes',
+      medications: driver.medications || 'Metformin 500mg, Salbutamol Inhaler (as needed)',
+      emergencyInstructions: driver.emergencyInstructions || 'Victim carries rescue inhaler in front glove compartment. Penicillin allergy — use alternate cephalosporin/macrolide. High-G impact requires cervical spine stabilization.',
       organDonor: driver.organDonor ?? true,
-      dateOfBirth: driver.dateOfBirth || '1995-01-01',
+      dateOfBirth: driver.dateOfBirth || '1992-05-14',
+      abhaId: driver.abhaId || '91-2026-8812-4410',
+      insuranceProvider: driver.insuranceProvider || 'Star Health Premier Trauma Cover',
+      insurancePolicyNumber: driver.insurancePolicyNumber || 'SH-2026-998812',
+      emergencyDoctorName: driver.emergencyDoctorName || 'Dr. Robert Vance (Apex Trauma Consultant)',
+      emergencyDoctorPhone: driver.emergencyDoctorPhone || '+919811122334',
       emergencyContacts: driver.emergencyContacts && driver.emergencyContacts.length > 0 ? driver.emergencyContacts : [
-        { name: 'Primary ICE Contact', relationship: 'Spouse / Parent', phone: vehicle.emergencyContactPhone, isPriority: true },
-        { name: 'Secondary ICE Contact', relationship: 'Family', phone: '+919811223344', isPriority: false },
+        { name: 'Priya Sharma', relationship: 'Spouse', phone: '+919876543210', isPriority: true, notifyOnConfirmation: true },
+        { name: 'O.P. Sharma', relationship: 'Father', phone: '+919811223344', isPriority: false, notifyOnConfirmation: true },
+        { name: 'Dr. Robert Vance', relationship: 'Physician', phone: '+919811122334', isPriority: false, notifyOnConfirmation: false },
       ],
     },
     latestLocation: {
       latitude: lastAlert?.latitude || 28.6139,
       longitude: lastAlert?.longitude || 77.2090,
-      locationName: lastAlert?.locationName || 'Live GPS Location',
+      locationName: lastAlert?.locationName || 'Live GPS Coordinates (Janpath / Rajpath Corridor)',
       timestamp: lastAlert?.timestamp || new Date().toISOString(),
+      gForce: lastAlert?.gForce || null,
+      impactSpeed: lastAlert?.impactSpeed || null,
+      severity: lastAlert?.severity || null,
     },
     emergencyHelplines: [
-      { name: 'Ambulance & Medical Trauma', number: '108' },
-      { name: 'Police Emergency Response', number: '112' },
-      { name: 'National Highway Helpline', number: '1033' },
+      { name: 'Emergency Trauma Ambulance', number: '108', role: 'Advanced Life Support Dispatch' },
+      { name: 'Police Emergency Response', number: '112', role: 'Traffic Accident First Responders' },
+      { name: 'National Highway Assistance', number: '1033', role: 'Highway Patrol & Tow Interceptor' },
     ],
-  });
+  };
+};
+
+app.get('/api/v1/ice-passport/:vehicleNumber', (req, res) => {
+  const { vehicleNumber } = req.params;
+  const payload = getMedicalPassportPayload(vehicleNumber);
+  return res.json(payload);
+});
+
+app.get('/api/v1/medical-passport/:vehicleNumber', (req, res) => {
+  const { vehicleNumber } = req.params;
+  const payload = getMedicalPassportPayload(vehicleNumber);
+  return res.json(payload);
 });
 
 // Update Medical Passport profile
 app.post('/api/v1/ice-passport/save', (req, res) => {
-  const { vehicleNumber, bloodGroup, medicalConditions, allergies, medications, organDonor, emergencyContacts } = req.body;
+  const { 
+    vehicleNumber, 
+    bloodGroup, 
+    medicalConditions, 
+    allergies, 
+    medications, 
+    emergencyInstructions,
+    organDonor, 
+    emergencyContacts,
+    insuranceProvider,
+    insurancePolicyNumber,
+    emergencyDoctorName,
+    emergencyDoctorPhone,
+    abhaId
+  } = req.body;
 
-  const vehicle = vehicles.find((v) => v.vehicleNumber.toLowerCase() === String(vehicleNumber).toLowerCase());
-  if (!vehicle) {
-    return res.status(404).json({ error: 'Vehicle not found' });
-  }
+  const vehicle = vehicles.find((v) => v.vehicleNumber.toLowerCase() === String(vehicleNumber).toLowerCase()) || vehicles[0];
 
-  if (vehicle.driver) {
+  if (vehicle && vehicle.driver) {
     if (bloodGroup) vehicle.driver.bloodGroup = bloodGroup;
     if (medicalConditions) vehicle.driver.medicalConditions = medicalConditions;
     if (allergies) vehicle.driver.allergies = allergies;
     if (medications) vehicle.driver.medications = medications;
+    if (emergencyInstructions) vehicle.driver.emergencyInstructions = emergencyInstructions;
     if (organDonor !== undefined) vehicle.driver.organDonor = organDonor;
     if (emergencyContacts) vehicle.driver.emergencyContacts = emergencyContacts;
+    if (insuranceProvider) vehicle.driver.insuranceProvider = insuranceProvider;
+    if (insurancePolicyNumber) vehicle.driver.insurancePolicyNumber = insurancePolicyNumber;
+    if (emergencyDoctorName) vehicle.driver.emergencyDoctorName = emergencyDoctorName;
+    if (emergencyDoctorPhone) vehicle.driver.emergencyDoctorPhone = emergencyDoctorPhone;
+    if (abhaId) vehicle.driver.abhaId = abhaId;
   }
 
-  return res.json({ success: true, message: 'Medical Passport updated successfully.' });
+  return res.json({ 
+    success: true, 
+    message: 'Medical Passport updated and synchronized to vehicle QR registry.',
+    passport: getMedicalPassportPayload(vehicle.vehicleNumber)
+  });
+});
+
+app.post('/api/v1/medical-passport/save', (req, res) => {
+  const { 
+    vehicleNumber, 
+    bloodGroup, 
+    medicalConditions, 
+    allergies, 
+    medications, 
+    emergencyInstructions,
+    organDonor, 
+    emergencyContacts,
+    insuranceProvider,
+    insurancePolicyNumber,
+    emergencyDoctorName,
+    emergencyDoctorPhone,
+    abhaId
+  } = req.body;
+
+  const vehicle = vehicles.find((v) => v.vehicleNumber.toLowerCase() === String(vehicleNumber).toLowerCase()) || vehicles[0];
+
+  if (vehicle && vehicle.driver) {
+    if (bloodGroup) vehicle.driver.bloodGroup = bloodGroup;
+    if (medicalConditions) vehicle.driver.medicalConditions = medicalConditions;
+    if (allergies) vehicle.driver.allergies = allergies;
+    if (medications) vehicle.driver.medications = medications;
+    if (emergencyInstructions) vehicle.driver.emergencyInstructions = emergencyInstructions;
+    if (organDonor !== undefined) vehicle.driver.organDonor = organDonor;
+    if (emergencyContacts) vehicle.driver.emergencyContacts = emergencyContacts;
+    if (insuranceProvider) vehicle.driver.insuranceProvider = insuranceProvider;
+    if (insurancePolicyNumber) vehicle.driver.insurancePolicyNumber = insurancePolicyNumber;
+    if (emergencyDoctorName) vehicle.driver.emergencyDoctorName = emergencyDoctorName;
+    if (emergencyDoctorPhone) vehicle.driver.emergencyDoctorPhone = emergencyDoctorPhone;
+    if (abhaId) vehicle.driver.abhaId = abhaId;
+  }
+
+  return res.json({ 
+    success: true, 
+    message: 'Medical Passport updated and synchronized to vehicle QR registry.',
+    passport: getMedicalPassportPayload(vehicle.vehicleNumber)
+  });
+});
+
+// First responder notifies Trauma Unit / Emergency Ward directly from scanned QR
+app.post('/api/v1/medical-passport/notify-trauma', (req, res) => {
+  const { vehicleNumber, hospitalName, triageNotes, responderName, bloodUnitsNeeded } = req.body;
+  const targetVeh = vehicleNumber || 'KA-01-AI-2026';
+  const passport = getMedicalPassportPayload(targetVeh);
+
+  const traumaNotification = {
+    id: `TRAUMA-DISPATCH-${Date.now()}`,
+    vehicleNumber: targetVeh,
+    victimName: passport.driver.name,
+    bloodGroup: passport.driver.bloodGroup,
+    allergies: passport.driver.allergies,
+    conditions: passport.driver.chronicConditions,
+    responderName: responderName || 'Paramedic Unit 04',
+    hospitalName: hospitalName || 'AIIMS Apex Trauma Center',
+    triageNotes: triageNotes || 'Victim non-communicative. Pre-alerting ER with Blood Group & Allergy Profile.',
+    bloodUnitsNeeded: bloodUnitsNeeded || 2,
+    timestamp: new Date().toISOString(),
+    status: 'ER_ALERTED_PREPARING_TRAUMA_BAY'
+  };
+
+  broadcastSSE('trauma_pre_alert', traumaNotification);
+
+  return res.json({
+    success: true,
+    message: `Trauma ER at ${traumaNotification.hospitalName} pre-alerted with Blood Group ${traumaNotification.bloodGroup} and allergy profile!`,
+    notification: traumaNotification
+  });
 });
 
 // ----------------------------------------------------

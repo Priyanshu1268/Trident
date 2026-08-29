@@ -39,6 +39,41 @@ export interface MedicalProfileData {
   dateOfBirth?: string;
   heightCm?: number;
   weightKg?: number;
+  abhaId?: string;
+  nationalHealthId?: string;
+  criticalNotes?: string;
+}
+
+export interface MedicalPassportData {
+  vehicleNumber: string;
+  modelName?: string;
+  vehicleType?: VehicleType;
+  qrPayloadUrl?: string;
+  fhirRecordId?: string;
+  driver: {
+    name: string;
+    phone: string;
+    bloodGroup: string;
+    allergies: string;
+    chronicConditions: string;
+    medications: string;
+    emergencyInstructions: string;
+    organDonor: boolean;
+    dateOfBirth?: string;
+    abhaId?: string;
+    insuranceProvider?: string;
+    insurancePolicyNumber?: string;
+    emergencyDoctorName?: string;
+    emergencyDoctorPhone?: string;
+    emergencyContacts: EmergencyContact[];
+  };
+  latestLocation?: {
+    latitude: number;
+    longitude: number;
+    locationName?: string;
+    timestamp?: string;
+  };
+  emergencyHelplines: { name: string; number: string; role: string }[];
 }
 
 export interface User {

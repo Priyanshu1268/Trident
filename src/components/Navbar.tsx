@@ -199,12 +199,12 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => onSelectTab('medical')}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                 activeTab === 'medical'
-                  ? 'bg-slate-100 text-slate-900 font-semibold'
+                  ? 'bg-rose-50 text-rose-900 font-bold border border-rose-200'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
               }`}
             >
               <HeartPulse className="w-3.5 h-3.5 text-rose-600" />
-              Medical
+              <span>Medical Passport &bull; QR</span>
             </button>
 
             <button
@@ -293,7 +293,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             { id: 'ice', label: 'ICE Lock', icon: QrCode },
             { id: 'telemetry', label: 'Telemetry', icon: Activity },
             { id: 'contacts', label: 'Contacts', icon: Users },
-            { id: 'medical', label: 'Medical', icon: HeartPulse },
+            { id: 'medical', label: 'Medical Passport', icon: HeartPulse },
             { id: 'history', label: 'History', icon: History },
             { id: 'hardware', label: 'Hardware', icon: Cpu },
             { id: 'analytics', label: 'Analytics', icon: BarChart3 },

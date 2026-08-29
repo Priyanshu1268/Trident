@@ -13,7 +13,9 @@ import {
   Activity, 
   ArrowRight,
   Sparkles,
-  Play
+  Play,
+  QrCode,
+  HeartPulse
 } from 'lucide-react';
 import { SystemHealthStatus, Vehicle, EmergencyContact, CrashAlert } from '../types';
 
@@ -260,40 +262,43 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
 
-        {/* AI & Medical Safety Badge */}
+        {/* Vehicle Emergency Medical Passport & QR Card */}
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-600" />
-              <h2 className="text-sm font-bold text-slate-900">Driver Medical Card</h2>
+              <QrCode className="w-5 h-5 text-rose-600" />
+              <h2 className="text-sm font-bold text-slate-900">Medical Passport & QR</h2>
             </div>
             <button 
               onClick={() => onNavigate('medical')}
-              className="text-xs text-slate-600 hover:text-slate-900 font-medium inline-flex items-center gap-1"
+              className="text-xs text-rose-600 hover:text-rose-700 font-bold inline-flex items-center gap-1 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100"
             >
-              View ICE <ArrowRight className="w-3 h-3" />
+              <span>Scan / Decal</span> <ArrowRight className="w-3 h-3" />
             </button>
           </div>
 
           <div className="space-y-3 text-xs">
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50 border border-rose-100">
-              <span className="text-rose-900 font-medium">Blood Group</span>
-              <span className="text-base font-extrabold text-rose-700">O Positive (O+)</span>
+              <div className="flex items-center space-x-1.5">
+                <HeartPulse className="w-4 h-4 text-rose-600" />
+                <span className="text-rose-900 font-bold">Blood Group</span>
+              </div>
+              <span className="text-base font-black text-rose-700 font-mono">O Positive (O+)</span>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="text-slate-500 block">Allergies</span>
-                <span className="font-semibold text-slate-800">Penicillin</span>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Drug Allergies</span>
+                <span className="font-semibold text-rose-900 text-xs">Penicillin, Aspirin</span>
               </div>
               <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="text-slate-500 block">Organ Donor</span>
-                <span className="font-semibold text-emerald-700">YES (Registered)</span>
+                <span className="text-slate-500 block text-[10px] uppercase font-bold">Organ Donor</span>
+                <span className="font-semibold text-emerald-700 text-xs">YES (Registered)</span>
               </div>
             </div>
 
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Medical emergency summary is automatically encoded into SMS alerts to first responders.
+              When victim is non-communicative, responders scan the windshield QR for instant blood type, allergy contraindications, and ICE calling.
             </p>
           </div>
         </div>
