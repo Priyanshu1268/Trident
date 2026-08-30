@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # SafeRide Web Application & Node.js Server
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://saferide_user:safe_pass_2026@postgres:5432/saferide_db
+      - JWT_SECRET=saferide_super_secret_jwt_key_2026
+      - DEMO_MODE=true
+      - AI_SERVICE_URL=http://ai-service:8000
+    depends_on:
+      - postgres
+      - ai-service
+    restart: unless-stopped
+
+  # Python AI Inference Microservice
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    restart: unless-stopped
+
+  # PostgreSQL Relational Database
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: saferide_user
+      POSTGRES_PASSWORD: safe_pass_2026
+      POSTGRES_DB: saferide_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Eclipse Mosquitto MQTT Broker (for IoT Telemetry)
+  mqtt:
+    image: eclipse-mosquitto:2.0
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
